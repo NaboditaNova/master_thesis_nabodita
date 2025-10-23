@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import CheckConstraint, String, Text, Integer
+from sqlalchemy import CheckConstraint, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects import mysql
 
@@ -13,7 +13,6 @@ class Material(Base):
         mysql.BIGINT(unsigned=True), primary_key=True, autoincrement=True
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    chemical_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     chemical_formula: Mapped[str | None] = mapped_column(String(100), nullable=True)
     polymer_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     common_applications: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -22,8 +21,8 @@ class Material(Base):
     density_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
     cas_number: Mapped[str | None] = mapped_column(String(12), nullable=True)
     color: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    standardized_sorting_number: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
+    standardized_sorting_number: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
     )
     sorting_guidelines: Mapped[str | None] = mapped_column(Text, nullable=True)
     din_spec_91446_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -31,7 +30,6 @@ class Material(Base):
     __table_args__ = (
         CheckConstraint(
             "(description IS NOT NULL AND CHAR_LENGTH(TRIM(description)) > 0) "
-            "OR (chemical_id IS NOT NULL AND CHAR_LENGTH(TRIM(chemical_id)) > 0) "
             "OR (chemical_formula IS NOT NULL AND CHAR_LENGTH(TRIM(chemical_formula)) > 0) "
             "OR (polymer_type IS NOT NULL AND CHAR_LENGTH(TRIM(polymer_type)) > 0) "
             "OR (common_applications IS NOT NULL AND CHAR_LENGTH(TRIM(common_applications)) > 0) "
