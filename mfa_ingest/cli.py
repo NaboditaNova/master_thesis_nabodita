@@ -5,7 +5,7 @@ from .extract.process_sheet_parser import parse_process_sheet
 from .transform.process_sheet_builder import build_packets_from_process_dict
 from .extract.mfa_sheet_parser import parse_mfa_sheet
 from .transform.merge_mfa_with_process import merge_mfa_into_packets
-
+from typing import Optional
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -277,6 +277,91 @@ def plan(
                     print(
                         f"  - {flow_name}: {it['component']} (score={it['score']}, suggestion={it['suggestion']})"
                     )
+
+
+@app.command()
+def load(
+    xlsm: str,
+    config: str = "config/default.yaml",
+    replace_process_by_name: bool = False,
+    materials: bool = False,
+    auto_create_materials: bool = False,
+    dry_run: bool = False,  # <- NEW
+    database_url: Optional[str] = None,  # <- NEW (override)
+    echo_sql: bool = False,  # <- NEW (debug)
+):
+    """
+    Load the given workbook into MariaDB.
+
+    - If --materials: upsert the Material_Table first (insert/update).
+    - If --replace-process-by-name: delete any existing process with same name before inserting (cascade).
+    - If --auto-create-materials: create a bare material(row) when a component match is missing.
+    - If --dry-run: execute everything but roll back the transaction at the end (no writes).
+    - If --database-url: override .env connection string for this run.
+    - If --echo-sql: print SQL emitted by SQLAlchemy (debug).
+    """
+    import yaml  # type: ignore[import-untyped]
+    from .db.session import get_engine, get_session
+    from .extract.process_sheet_parser import parse_process_sheet
+    from .transform.process_sheet_builder import build_packets_from_process_dict
+    from .extract.mfa_sheet_parser import parse_mfa_sheet
+    from .transform.merge_mfa_with_process import merge_mfa_into_packets
+    from .extract.material_sheet_parser import parse_material_sheet
+    from .load.loader import load_packets, LoadOptions
+
+    with open(config, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    # Build packets (Process + MFA)
+    pdata = parse_process_sheet(xlsm, cfg)
+    packets = build_packets_from_process_dict(pdata)
+    mfa = parse_mfa_sheet(xlsm, cfg)
+    _unmatched = merge_mfa_into_packets(packets, mfa)  # validation should catch these
+
+    mats = parse_material_sheet(xlsm, cfg) if materials else []
+
+    # DB session
+    engine = get_engine(database_url_override=database_url, echo=echo_sql)
+    with get_session(engine) as session:
+        session.begin()
+        opts = LoadOptions(
+            replace_process_by_name=replace_process_by_name,
+            materials=mats,
+            auto_create_materials=auto_create_materials,
+        )
+        result = load_packets(session, packets, opts)
+
+        if dry_run:
+            # Don't persist anything; this mimics everything except the final commit
+            session.rollback()
+        else:
+            session.commit()
+
+    # Pretty summary
+    print("\n=== LOAD SUMMARY ===")
+    if dry_run:
+        print("  (DRY RUN: no changes were committed)")
+
+    for k in (
+        "material_inserted",
+        "material_updated",
+        "collection_process_kpi",
+        "sorting_process_kpi",
+        "recycling_process_kpi",
+        "process",
+        "process_material_flow",
+        "collection_flow_kpi",
+        "flow_sample",
+        "flow_sample_component",
+    ):
+        print(f"  {k}: {result.counts[k]}")
+
+    if result.components_without_material:
+        print("\n⚠ Components without material_id (kept NULL):")
+        for flow_name, cmp_name in result.components_without_material[:50]:
+            print(f"  - flow {flow_name!r}: component {cmp_name!r}")
+        if len(result.components_without_material) > 50:
+            print(f"  ... and {len(result.components_without_material) - 50} more")
 
 
 if __name__ == "__main__":
