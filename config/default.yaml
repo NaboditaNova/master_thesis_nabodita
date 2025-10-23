@@ -7,3 +7,209 @@ sheets:
 etl:
   chunk_size: 500
   dry_run: true
+
+mapping:
+  process:
+    columns:
+      process_name: ["Process Name", "Process", "Name"]
+      process_type: ["Type", "Process Type"]
+      # Optional process-level KPI fields (if present in sheet; else ignore)
+      collection_rate_amount: ["Collection Rate Amount"]
+      collection_rate_unit: ["Collection Rate Unit"]
+      sorting_yield_amount: ["Sorting Yield Amount"]
+      sorting_yield_unit: ["Sorting Yield Unit"]
+      recycling_yield_amount: ["Recycling Yield Amount"]
+      recycling_yield_unit: ["Recycling Yield Unit"]
+
+  flows:
+    columns:
+      direction: ["Direction"]
+      material_name: ["Material Name", "Flow Material", "Name"]
+      amount_value: ["Amount", "Amount Value"]
+      amount_unit: ["Amount Unit", "Unit"]
+      reference_text: ["Reference", "Notes"]
+
+  flow_sample:
+    columns:
+      stakeholder_name: ["Stakeholder", "Partner", "Organization"]
+      sample_date: ["Sample Date", "Date"]
+      contamination: ["Contamination"]
+      contamination_unit: ["Contamination Unit"]
+      moisture_condition: ["Moisture Condition"]
+      density: ["Density"]
+      density_unit: ["Density Unit"]
+      carbon_content_pct: ["C %", "Carbon %"]
+      nitrogen_content_pct: ["N %"]
+      hydrogen_content_pct: ["H %"]
+      phosphorus_content_pct: ["P %"]
+      oxygen_content_pct: ["O %"]
+      color: ["Color", "Colour"]
+      amount_value: ["Sample Amount", "Amount"]
+      amount_unit: ["Sample Amount Unit", "Unit"]
+
+  flow_sample_component:
+    columns:
+      polymer_name: ["Polymer", "Polymer Name"]
+      description: ["Description", "Remark"]
+      amount_value: ["Component Amount", "Amount"]
+      amount_unit: ["Component Amount Unit", "Unit"]
+
+process_sheet:
+  sheet_name: "Process"
+  labels:
+    process_label: ["process"]                  # left cell text for process_name
+    process_type_label: ["process typ","process type"]
+  sections:
+    input_flows_title: ["input flows"]
+    technology_title: ["technology"]
+    output_flows_title: ["output flows"]
+  input_flows:
+    # we only keep rows whose 'Input' col equals this value
+    keep_value_in_input_col: ["input material"]
+    header_map:
+      input: ["input"]
+      name: ["name"]
+      value: ["value","amount","amount value"]
+      unit: ["unit","amount unit"]
+      reference: ["reference","notes"]
+  output_flows:
+    keep_value_in_output_col: ["products and valuable by-products"]
+    header_map:
+      output: ["output"]
+      name: ["name"]
+      value: ["value","amount","amount value"]
+      unit: ["unit","amount unit"]
+      reference: ["reference","notes"]
+  technology:
+    header_map:
+      process_params: ["process parameters"]
+      name: ["name"]
+      value: ["value"]
+      unit: ["unit"]
+      reference: ["reference","notes"]
+    patterns:
+      collection:
+        params_contains: "process parameters (fill if the process type is 'collection')"
+        name_equals: "collection rate"
+      sorting:
+        params_contains: "process parameters (fill if the process type is 'sorting')"
+        name_equals: "process-level sorting yield"
+      recycling:
+        params_contains: "process parameters (fill if the process type is 'recycling')"
+        name_equals: "process_level_recycling yield"
+
+
+mfa_sheet:
+  sheet_name: "MFA&Material_quality_Template"
+
+  # fixed header in row 1 (index 0): first two labels, then one column per material/flow name
+  top_headers:
+    name_of_sample: ["name of the sample(flow)"]
+    description: ["description"]
+
+  labels:
+    stakeholder_name: ["stakeholder name"]
+    date: ["date"]
+
+  sections:
+    generic_data: ["generic data"]
+    elementary: ["elementary composition"]
+    psd_collection: ["process specific data (collection)"]
+    psd_sorting: ["process specific data (sorting)"]      # placeholder (not in DB yet)
+    psd_recycling: ["process specific data (recycling)"]  # placeholder (not in DB yet)
+    material_composition: ["material composition"]
+
+  subheaders:
+    amount: ["amount"]
+    unit: ["unit", "unit/method/condition"]
+
+  map_generic_rows:
+    amount:                { field_value: "amount_value",           field_unit: "amount_unit",           type: "float" }
+    contamination:         { field_value: "contamination",          field_unit: "contamination_unit",    type: "float" }
+    moisture condition:    { field_value: "moisture_condition",     field_unit: null,                    type: "text"  }
+    density:               { field_value: "density",                field_unit: "density_unit",          type: "float" }
+    color:                 { field_value: "color",                  field_unit: null,                    type: "text"  }
+
+  map_elementary_rows:
+    carbon content: "carbon_content_pct"
+    n: "nitrogen_content_pct"
+    p: "phosphorus_content_pct"
+    h: "hydrogen_content_pct"
+    o: "oxygen_content_pct"
+
+  map_collection_kpi_rows:
+    collection purity wt pct: {field_value: "purity_amount", field_unit: "purity_unit"}
+    attached moisture dirt: {field_value: "attached_moisture_and_dirt_amount_value", field_unit: "attached_moisture_and_dirt_amount_unit"}
+    non-packaging plastics (npp) share: {field_value: "npp_share_amount_value", field_unit: "npp_share_amount_unit"}
+    residual waste share: {field_value: "residual_waste_share_amount_value", field_unit: "residual_waste_share_amount_unit"}
+    expanded polystyrene (eps) items: {field_value: "eps_items_amount_value", field_unit: "eps_items_amount_unit"}
+
+
+material_sheet:
+  sheet_name: "Material_Table"
+
+  header_map:
+    polymer_type: ["Name of material types"]
+    description: ["Description"]
+    chemical_formula: ["Chemical Formula"]
+    carbon_content: ["carbon content"]
+    standard_density_kg_m3: ["Standard Density  ( kg/m³)", "Standard Density (kg/m3)"]
+    density_reference: ["Reference for Density"]
+    cas_number: ["CAS Number"]
+    color: ["Color"]
+    common_applications: ["Common Applications"]
+    standardized_sorting_number: ["Standardized Sorting Number"]
+    sorting_guidelines: ["Sorting Guidelines"]
+    din_spec_91446_comments: ["DIN SPEC 91446 Comments"]
+
+  # optional normalization helpers for matching
+  synonyms:
+    "non-ferrous metals":
+      - "aluminium-containing / non-ferrous metal"
+      - "non ferrous"
+      - "non-ferrous"
+
+  # explicit overrides (left = flow_sample_component polymer_name; right = material polymer_type/CAS/etc.)
+  hardcode_map:
+    # "Separable combination packaging (trennbar)": "Separable combination packaging"
+    # "Tinplate / ferrous metal": "Ferrous metals"
+    "Aluminium-containing / non-ferrous metal": "Non-ferrous metals"
+    # "Buckets, canisters"
+    # "Films < DIN A4"
+    # "Films > DIN A4"
+    "Transparent PET bottles": "Polyethylene Terephthalate(PET)"
+    "Other PET": "Polyethylene Terephthalate(PET)"
+    # "Polyethylene (PE)"
+    "Polypropylene (PP)": "Polypropylene (PP)"
+    "Polystyrene (PS)": "Polystyrene (PS)"
+    "Other plastics": "Others Mixed Plastics"
+    "Beverage cartons (FKN)": "FKN (Liquid cartons)"
+    "PPK composites (Verbunde)": "Paper and Cardboard (PPK)"
+    # "Separable combination packaging (trennbar)":
+    "Tinplate / ferrous metal": "FE metals"
+    "PPK, no LVP (paper/card misthrows)": "Paper and Cardboard (PPK)"
+    "Unsuitable LVP material (residues)": "Sorting residues"
+    "Polyethylene Terephthalate(PET)": "Polyethylene Terephthalate(PET)"
+    "Acrylonitrile Butadiene Styrene(ABS)": "Acrylonitrile Butadiene Styrene(ABS)"
+    "High-Density Polyethylene (HDPE)": "High-Density Polyethylene (HDPE)"
+    "Low-Density Polyethylene (LDPE)": "Low-Density Polyethylene (LDPE)"
+    "Polyvinyl Chloride (PVC)": "Polyvinyl Chloride (PVC)"
+    "Polycarbonate (PC)": "Polycarbonate (PC)"
+    "Polymethyl Methacrylate (PMMA)": "Polymethyl Methacrylate (PMMA)"
+    "Nylon (Polyamide, PA)": "Nylon (Polyamide, PA)"
+    "Polyurethane (PUR)": "Polyurethane (PUR)"
+    "Fiber-Reinforced Plastics (FRP)": "Fiber-Reinforced Plastics (FRP)"
+    "Folien": "Folien"
+    "Weißblech (tinplate)": "Weißblech (tinplate)"
+    "PET Trays": "PET Trays"
+    "Mixed PET (90-10)": "Mixed PET (90-10)"
+    "Substitute Fuel": "Substitute Fuel"
+    "Paper and Cardboard (PPK)": "Paper and Cardboard (PPK)"
+    "Others Mixed Plastics": "Others Mixed Plastics"
+    "Non-ferrous metals": "Non-ferrous metals"
+    "FE metals": "FE metals"
+    "Foils": "Foils"
+    "FKN (Liquid cartons)": "FKN (Liquid cartons)"
+    "Mixed plastics for energy recovery": "Mixed plastics for energy recovery"
+    "Sorting residues": "Sorting residues"
+    "Polyolefin": "Polyolefin"
