@@ -113,80 +113,71 @@ Open JupyterLab and choose the **Python (mfa-ingest)** kernel.
 
 ## 🧭 Repository structure
 
+```
 master_thesis_nabodita
-│  .env
-│  .env.example
-│  .gitignore
-│  .pre-commit-config.yaml
-│  alembic.ini
-│  poetry.lock
-│  pyproject.toml
-│  README.md
-│
-├─ alembic
-│  │  alembic.ini
-│  │  env.py
-│  │  README
-│  │  script.py.mako
-│  │
-│  └─ versions
-│     │  503e8e6710ef_material_drop_chemical_id_make_.py
-│     │  cbbf78965a17_baseline_existing_schema_pre_alembic.py
-│     │  f41369d44069_baseline_create_process_triggers.py
-│
-├─ config
-│  │  default.yaml
-│  │  logging.ini
-│
-└─ mfa_ingest
-   │  cli.py
-   │  __init__.py
-   │
-   ├─ config
-   ├─ core
-   │  │  db.py
-   │  │  logging.py
-   │  │  settings.py
-   │  │  __init__.py
-   │
-   ├─ db
-   │  │  session.py
-   │
-   ├─ db_models
-   │  │  base.py
-   │  │  flows.py
-   │  │  material.py
-   │  │  process.py
-   │  │  process_kpis.py
-   │  │  __init__.py
-   │
-   ├─ extract
-   │  │  excel_reader.py
-   │  │  material_sheet_parser.py
-   │  │  mfa_sheet_parser.py
-   │  │  process_sheet_parser.py
-   │  │  __init__.py
-   │
-   ├─ load
-   │  │  idempotency.py
-   │  │  loader.py
-   │  │  __init__.py
-   │
-   ├─ schemas
-   │  │  flow.py
-   │  │  material.py
-   │  │  process.py
-   │  │  __init__.py
-   │
-   ├─ transform
-   │  │  mappers.py
-   │  │  material_matcher.py
-   │  │  merge_mfa_with_process.py
-   │  │  process_sheet_builder.py
-   │  │  validators.py
-   │  │  __init__.py
-   │
-   └─ __init__.py
+├── .env
+├── .env.example
+├── .gitignore
+├── .pre-commit-config.yaml
+├── alembic.ini
+├── poetry.lock
+├── pyproject.toml
+├── README.md
+├── alembic
+│   ├── alembic.ini
+│   ├── env.py
+│   ├── README
+│   ├── script.py.mako
+│   └── versions
+│       ├── 503e8e6710ef_material_drop_chemical_id_make_.py
+│       ├── cbbf78965a17_baseline_existing_schema_pre_alembic.py
+│       └── f41369d44069_baseline_create_process_triggers.py
+├── config
+│   ├── default.yaml
+│   └── logging.ini
+└── mfa_ingest
+    ├── cli.py
+    ├── __init__.py
+    ├── config
+    ├── core
+    │   ├── db.py
+    │   ├── logging.py
+    │   ├── settings.py
+    │   └── __init__.py
+    ├── db
+    │   └── session.py
+    ├── db_models
+    │   ├── base.py
+    │   ├── flows.py
+    │   ├── material.py
+    │   ├── process.py
+    │   ├── process_kpis.py
+    │   └── __init__.py
+    ├── extract
+    │   ├── excel_reader.py
+    │   ├── material_sheet_parser.py
+    │   ├── mfa_sheet_parser.py
+    │   ├── process_sheet_parser.py
+    │   └── __init__.py
+    ├── load
+    │   ├── idempotency.py
+    │   ├── loader.py
+    │   └── __init__.py
+    ├── schemas
+    │   ├── flow.py
+    │   ├── material.py
+    │   ├── process.py
+    │   └── __init__.py
+    └── transform
+        ├── mappers.py
+        ├── material_matcher.py
+        ├── merge_mfa_with_process.py
+        ├── process_sheet_builder.py
+        ├── validators.py
+        └── __init__.py
+
+
+```
 
 ---
 
