@@ -324,10 +324,27 @@ def load(
     engine = get_engine(database_url_override=database_url, echo=echo_sql)
     with get_session(engine) as session:
         session.begin()
+        mat_cfg = cfg.get("material_sheet", {})
+        # normalize to lowercase for robust matches
+        hmap_src = mat_cfg.get("hardcode_map") or {}
+        hardcode_map = {
+            (k or "").strip().lower(): (v or "").strip().lower()
+            for k, v in hmap_src.items()
+        }
+
+        syn_src = mat_cfg.get("synonyms") or {}
+        synonyms = {
+            (canon or "")
+            .strip()
+            .lower(): [(a or "").strip().lower() for a in (aliases or [])]
+            for canon, aliases in syn_src.items()
+        }
         opts = LoadOptions(
             replace_process_by_name=replace_process_by_name,
             materials=mats,
             auto_create_materials=auto_create_materials,
+            hardcode_map=hardcode_map,  # <-- pass in
+            synonyms=synonyms,  # <-- pass in
         )
         result = load_packets(session, packets, opts)
 
