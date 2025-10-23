@@ -160,11 +160,15 @@ class LoadOptions:
         materials: Optional[List[MaterialIn]] = None,
         auto_create_materials: bool = False,
         min_match_score: float = 0.55,
+        hardcode_map: Optional[Dict[str, str]] = None,  # <-- add
+        synonyms: Optional[Dict[str, List[str]]] = None,  # <-- add
     ) -> None:
         self.replace_process_by_name = replace_process_by_name
         self.materials = materials or []
         self.auto_create_materials = auto_create_materials
         self.min_match_score = min_match_score
+        self.hardcode_map = hardcode_map or {}
+        self.synonyms = synonyms or {}
 
 
 class LoadResult:
@@ -200,9 +204,28 @@ def load_packets(
         ins, upd = upsert_materials(session, opts.materials)
         res.counts["material_inserted"] += ins
         res.counts["material_updated"] += upd
+        session.flush()  # <-- IMPORTANT: make inserts visible to subsequent SELECTs
 
     # material lookup map (by polymer_type)
     mat_name_to_id = build_material_name_to_id(session)
+
+    # Build alias -> material_id map from config
+    alias_to_id: Dict[str, int] = {}
+
+    # synonyms: canonical -> [aliases...]
+    for canon, aliases in opts.synonyms.items():
+        canon_key = canon.strip().lower()
+        canon_id = mat_name_to_id.get(canon_key)
+        if canon_id:
+            for alias in aliases:
+                alias_to_id[alias.strip().lower()] = canon_id
+
+    # hardcode_map: source_name -> canonical_name
+    for src, canon in opts.hardcode_map.items():
+        canon_key = canon.strip().lower()
+        canon_id = mat_name_to_id.get(canon_key)
+        if canon_id:
+            alias_to_id[src.strip().lower()] = canon_id
 
     # 1) One process per sheet (your builder currently produces 1 packet)
     for packet in packets:
@@ -358,26 +381,44 @@ def load_packets(
 
                 # 2c) Components for the sample
                 for comp in fp.components:
-                    # Try to resolve material_id from the suggested material name (created in Step 3)
+                    # Try to resolve by (1) suggested, (2) polymer_name, (3) alias maps, (4) fuzzy
                     mat_id: Optional[int] = None
-                    if comp.material_name_suggested:
-                        mat_id = mat_name_to_id.get(
-                            comp.material_name_suggested.strip().lower()
-                        )
 
-                        # optionally auto-create a material entry if not found
-                        if mat_id is None and opts.auto_create_materials:
-                            new_m = Material(polymer_type=comp.material_name_suggested)
-                            session.add(new_m)
-                            session.flush()
-                            mat_id = new_m.material_id
-                            mat_name_to_id[
-                                comp.material_name_suggested.strip().lower()
-                            ] = mat_id
+                    def _norm(s: Optional[str]) -> str:
+                        return (s or "").strip().lower()
 
+                    # (1) suggested direct match
+                    if getattr(comp, "material_name_suggested", None):
+                        key = _norm(comp.material_name_suggested)
+                        mat_id = mat_name_to_id.get(key) or alias_to_id.get(key)
+
+                    # (2) polymer_name direct/alias
                     if mat_id is None and comp.polymer_name:
-                        # also try direct polymer_name if not suggested
-                        mat_id = mat_name_to_id.get(comp.polymer_name.strip().lower())
+                        key = _norm(comp.polymer_name)
+                        mat_id = mat_name_to_id.get(key) or alias_to_id.get(key)
+
+                    # (3) description alias (rare but why not)
+                    if mat_id is None and comp.description:
+                        key = _norm(comp.description)
+                        mat_id = alias_to_id.get(key)
+
+                    # (4) very light fuzzy against known canonical names (polymer_type)
+                    if mat_id is None and (
+                        comp.polymer_name or comp.material_name_suggested
+                    ):
+                        from difflib import SequenceMatcher
+
+                        search_key = _norm(comp.material_name_suggested) or _norm(
+                            comp.polymer_name
+                        )
+                        best_key = None
+                        best_score = 0.0
+                        for k in mat_name_to_id.keys():
+                            sc = SequenceMatcher(None, search_key, k).ratio()
+                            if sc > best_score:
+                                best_key, best_score = k, sc
+                        if best_key and best_score >= opts.min_match_score:
+                            mat_id = mat_name_to_id[best_key]
 
                     # record unresolved for the report
                     if mat_id is None and (comp.polymer_name or comp.description):

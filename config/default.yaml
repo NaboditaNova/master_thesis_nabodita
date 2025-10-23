@@ -179,7 +179,7 @@ material_sheet:
     # "Films > DIN A4"
     "Transparent PET bottles": "Polyethylene Terephthalate(PET)"
     "Other PET": "Polyethylene Terephthalate(PET)"
-    # "Polyethylene (PE)"
+    "Polyethylene (PE)": "Polyethylene (PE)"
     "Polypropylene (PP)": "Polypropylene (PP)"
     "Polystyrene (PS)": "Polystyrene (PS)"
     "Other plastics": "Others Mixed Plastics"
