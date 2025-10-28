@@ -2,7 +2,6 @@ from __future__ import annotations
 from sqlalchemy import String, Enum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects import mysql
-
 from .base import Base
 
 
@@ -53,7 +52,6 @@ class Process(Base):
     collection_kpi = relationship("CollectionProcessKPI", back_populates="process")
     sorting_kpi = relationship("SortingProcessKPI", back_populates="process")
     recycling_kpi = relationship("RecyclingProcessKPI", back_populates="process")
-
     material_flows = relationship(
         "ProcessMaterialFlow", back_populates="process", cascade="all, delete-orphan"
     )

@@ -146,28 +146,20 @@ class SortingFlowKPIIn(BaseModel):
 class RecyclingFlowKPIIn(BaseModel):
     filtration_amount: float | None = None
     filtration_unit: str | None = None
-
     recyclate_polymer_purity_amount: float | None = None
     recyclate_polymer_purity_unit: str | None = None
-
     pcr_content_amount: float | None = None
     pcr_content_unit: str | None = None
-
     melt_flow_rate_amount: float | None = None
     melt_flow_rate_unit: str | None = None
-
     ash_content_amount: float | None = None
     ash_content_unit: str | None = None
-
     tensile_modulus_amount: float | None = None
     tensile_modulus_unit: str | None = None
-
     tensile_strength_amount: float | None = None
     tensile_strength_unit: str | None = None
-
     chapry_notch_impact_strength_amount: float | None = None
     chapry_notch_impact_strength_unit: str | None = None
-
     yield_flow_sample_amount: float | None = None
     yield_flow_sample_unit: str | None = None
 
