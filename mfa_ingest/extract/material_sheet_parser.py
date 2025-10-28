@@ -21,12 +21,9 @@ def _read_table(path: str, sheet_name: str) -> pd.DataFrame:
         dtype=str,
         keep_default_na=False,
     )
-    # normalize headers
     df.columns = [_norm(c) for c in df.columns]
-    # drop the second row (descriptions)
     if len(df) >= 1:
         df = df.drop(index=0).reset_index(drop=True)
-    # strip cells
     df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
     return df
 
@@ -50,7 +47,6 @@ def parse_material_sheet(path: str, cfg: Dict) -> List[MaterialIn]:
     materials: List[MaterialIn] = []
     for _, row in df.iterrows():
         rec = {k: row.get(col) for k, col in pos.items()}
-        # skip fully empty rows (all values None/blank)
         if not any(_n(v) for v in rec.values()):
             continue
         materials.append(MaterialIn(**rec))

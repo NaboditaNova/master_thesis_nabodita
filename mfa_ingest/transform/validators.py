@@ -23,7 +23,6 @@ def validate_packets(packets: List[ProcessPacket]) -> List[Issue]:
     issues: List[Issue] = []
 
     for p in packets:
-        # process-level KPI pairing if provided
         proc = p.process
         if proc.collection_rate_amount is not None and not proc.collection_rate_unit:
             issues.append(
@@ -72,7 +71,6 @@ def validate_packets(packets: List[ProcessPacket]) -> List[Issue]:
                         )
                     )
 
-                # 0..100 for percentages
                 for name in (
                     "carbon_content_pct",
                     "nitrogen_content_pct",
@@ -88,7 +86,6 @@ def validate_packets(packets: List[ProcessPacket]) -> List[Issue]:
                             )
                         )
 
-            # collection flow KPI pairing rules
             if getattr(fp, "collection_kpi", None):
                 k = fp.collection_kpi
                 if k is not None:
@@ -141,7 +138,7 @@ def validate_packets(packets: List[ProcessPacket]) -> List[Issue]:
                                     f"{name} provided but unit missing",
                                 )
                             )
-                    # at least one KPI value must be present if KPI object exists
+
                     if not any_value:
                         issues.append(
                             Issue(

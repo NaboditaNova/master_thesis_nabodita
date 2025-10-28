@@ -23,7 +23,6 @@ from ..db_models.flows import (
 )
 from ..db_models.material import Material
 
-# Schemas (packets built in Step 3)
 from ..schemas.flow import (
     ProcessPacket,
     FlowSampleIn,
@@ -34,7 +33,6 @@ from ..schemas.flow import (
 from ..schemas.material import MaterialIn
 
 
-# ---------- small helpers ----------
 def _parse_date_maybe(s: Optional[str]) -> Optional[date]:
     if not s:
         return None
@@ -42,7 +40,6 @@ def _parse_date_maybe(s: Optional[str]) -> Optional[date]:
     if not t:
         return None
 
-    # Try common text formats (with/without time)
     for fmt in (
         "%d.%m.%Y",
         "%Y-%m-%d",
@@ -56,7 +53,6 @@ def _parse_date_maybe(s: Optional[str]) -> Optional[date]:
         except ValueError:
             pass
 
-    # Optional: Excel serials (e.g., 45500)
     if re.fullmatch(r"\d{4,6}", t):
         try:
             n = int(t)
@@ -102,7 +98,6 @@ def _extract_process_kpi(packet: "ProcessPacket") -> Tuple[Optional[str], Any]:
     if k is not None:
         return "recycling", k
 
-    # unified field variant
     k = getattr(packet, "process_kpi", None)
     if k is None:
         return None, None
@@ -117,9 +112,6 @@ def _extract_process_kpi(packet: "ProcessPacket") -> Tuple[Optional[str], Any]:
     return None, None
 
 
-# ---------- materials upsert & lookup ----------
-
-
 def upsert_materials(session: Session, rows: Iterable[MaterialIn]) -> Tuple[int, int]:
     """
     Insert new / update changed materials keyed by (polymer_type).
@@ -128,7 +120,6 @@ def upsert_materials(session: Session, rows: Iterable[MaterialIn]) -> Tuple[int,
     inserted = 0
     updated = 0
 
-    # build current index by polymer_type (case-insensitive)
     existing = {
         (m.polymer_type or "").strip().lower(): m
         for m in session.scalars(select(Material)).all()
@@ -137,7 +128,6 @@ def upsert_materials(session: Session, rows: Iterable[MaterialIn]) -> Tuple[int,
     for rec in rows:
         key = (rec.polymer_type or "").strip().lower()
         if not key:
-            # skip records without a polymer_type anchor
             continue
 
         cur = existing.get(key)
@@ -147,7 +137,6 @@ def upsert_materials(session: Session, rows: Iterable[MaterialIn]) -> Tuple[int,
             session.add(Material(**payload))
             inserted += 1
         else:
-            # Update only if any field differs (simple compare)
             changed = False
             for k, v in payload.items():
                 if getattr(cur, k) != v:
@@ -170,9 +159,6 @@ def build_material_name_to_id(session: Session) -> Dict[str, int]:
     return out
 
 
-# ---------- core load ----------
-
-
 class LoadOptions:
     def __init__(
         self,
@@ -180,8 +166,8 @@ class LoadOptions:
         materials: Optional[List[MaterialIn]] = None,
         auto_create_materials: bool = False,
         min_match_score: float = 0.55,
-        hardcode_map: Optional[Dict[str, str]] = None,  # <-- add
-        synonyms: Optional[Dict[str, List[str]]] = None,  # <-- add
+        hardcode_map: Optional[Dict[str, str]] = None,
+        synonyms: Optional[Dict[str, List[str]]] = None,
     ) -> None:
         self.replace_process_by_name = replace_process_by_name
         self.materials = materials or []
@@ -207,9 +193,7 @@ class LoadResult:
             "material_inserted": 0,
             "material_updated": 0,
         }
-        self.components_without_material: List[Tuple[str, str]] = (
-            []
-        )  # [(flow_material_name, component_polymer_name)]
+        self.components_without_material: List[Tuple[str, str]] = []
 
 
 def load_packets(
@@ -221,20 +205,16 @@ def load_packets(
     """
     res = LoadResult()
 
-    # 0) Optional materials upsert (one-time generally)
     if opts.materials:
         ins, upd = upsert_materials(session, opts.materials)
         res.counts["material_inserted"] += ins
         res.counts["material_updated"] += upd
-        session.flush()  # <-- IMPORTANT: make inserts visible to subsequent SELECTs
+        session.flush()
 
-    # material lookup map (by polymer_type)
     mat_name_to_id = build_material_name_to_id(session)
 
-    # Build alias -> material_id map from config
     alias_to_id: Dict[str, int] = {}
 
-    # synonyms: canonical -> [aliases...]
     for canon, aliases in opts.synonyms.items():
         canon_key = canon.strip().lower()
         canon_id = mat_name_to_id.get(canon_key)
@@ -242,16 +222,13 @@ def load_packets(
             for alias in aliases:
                 alias_to_id[alias.strip().lower()] = canon_id
 
-    # hardcode_map: source_name -> canonical_name
     for src, canon in opts.hardcode_map.items():
         canon_key = canon.strip().lower()
         canon_id = mat_name_to_id.get(canon_key)
         if canon_id:
             alias_to_id[src.strip().lower()] = canon_id
 
-    # 1) One process per sheet (your builder currently produces 1 packet)
     for packet in packets:
-        # replace option: delete existing process by (name) to avoid duplicates
         if opts.replace_process_by_name and packet.process.process_name:
             existing_proc = session.scalar(
                 select(Process).where(
@@ -259,11 +236,9 @@ def load_packets(
                 )
             )
             if existing_proc is not None:
-                # ON DELETE CASCADE ensures children go away
                 session.delete(existing_proc)
                 session.flush()
 
-        # 1a) Insert process-level KPI (read from packet.process)
         proc_in = packet.process
         process_kpi_id: Optional[int] = None
         kpi_table: Optional[str] = None
@@ -319,10 +294,9 @@ def load_packets(
             process_kpi_id = obj.process_kpi_id
             kpi_table = "recycling"
 
-        # 1b) Insert process
         proc = Process(
             process_name=packet.process.process_name,
-            process_type=packet.process.process_type,  # trigger enforces consistency
+            process_type=packet.process.process_type,
             collection_process_kpi_id=(
                 process_kpi_id if kpi_table == "collection" else None
             ),
@@ -335,7 +309,6 @@ def load_packets(
         session.flush()
         res.counts["process"] += 1
 
-        # 2) Insert flows + MFA bits
         for fp in packet.flows:
             flow = ProcessMaterialFlow(
                 process_id=proc.process_id,
@@ -349,13 +322,10 @@ def load_packets(
             session.flush()
             res.counts["process_material_flow"] += 1
 
-            # 2a) Flow KPI (collection only, for now)
-            # --- Flow-level KPI creation ---
             col_flow_kpi_id: Optional[int] = None
             sort_flow_kpi_id: Optional[int] = None
             rec_flow_kpi_id: Optional[int] = None
 
-            # 3a) Collection flow KPI (existing logic, just assign to col_flow_kpi_id)
             if fp.collection_kpi is not None and _has_any(
                 fp.collection_kpi.model_dump(exclude_none=True)
             ):
@@ -381,7 +351,6 @@ def load_packets(
                 res.counts["collection_flow_kpi"] += 1
                 col_flow_kpi_id = ck_obj.flow_kpi_id
 
-            # 3b) Sorting flow KPI (NEW)
             sk = fp.sorting_kpi
             if sk is not None and _has_any(sk.model_dump(exclude_none=True)):
                 sk = cast(SortingFlowKPIIn, sk)
@@ -416,7 +385,6 @@ def load_packets(
                 res.counts["sorting_flow_kpi"] += 1
                 sort_flow_kpi_id = sk_obj.flow_kpi_id
 
-            # 3c) Recycling flow KPI (NEW)
             rk = fp.recycling_kpi
             if rk is not None and _has_any(rk.model_dump(exclude_none=True)):
                 rk = cast(RecyclingFlowKPIIn, rk)
@@ -449,7 +417,6 @@ def load_packets(
                 res.counts["recycling_flow_kpi"] += 1
                 rec_flow_kpi_id = rk_obj.flow_kpi_id
 
-            # 2b) Flow sample
             if fp.sample is not None and _has_any(
                 fp.sample.model_dump(exclude_none=True)
             ):
@@ -480,30 +447,24 @@ def load_packets(
                 session.flush()
                 res.counts["flow_sample"] += 1
 
-                # 2c) Components for the sample
                 for comp in fp.components:
-                    # Try to resolve by (1) suggested, (2) polymer_name, (3) alias maps, (4) fuzzy
                     mat_id: Optional[int] = None
 
                     def _norm(s: Optional[str]) -> str:
                         return (s or "").strip().lower()
 
-                    # (1) suggested direct match
                     if getattr(comp, "material_name_suggested", None):
                         key = _norm(comp.material_name_suggested)
                         mat_id = mat_name_to_id.get(key) or alias_to_id.get(key)
 
-                    # (2) polymer_name direct/alias
                     if mat_id is None and comp.polymer_name:
                         key = _norm(comp.polymer_name)
                         mat_id = mat_name_to_id.get(key) or alias_to_id.get(key)
 
-                    # (3) description alias (rare but why not)
                     if mat_id is None and comp.description:
                         key = _norm(comp.description)
                         mat_id = alias_to_id.get(key)
 
-                    # (4) very light fuzzy against known canonical names (polymer_type)
                     if mat_id is None and (
                         comp.polymer_name or comp.material_name_suggested
                     ):
@@ -521,7 +482,6 @@ def load_packets(
                         if best_key and best_score >= opts.min_match_score:
                             mat_id = mat_name_to_id[best_key]
 
-                    # record unresolved for the report
                     if mat_id is None and (comp.polymer_name or comp.description):
                         res.components_without_material.append(
                             (

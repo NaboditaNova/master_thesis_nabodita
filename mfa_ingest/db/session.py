@@ -4,8 +4,6 @@ from typing import Optional, Union, Literal
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
-
-# Use pydantic-settings to read .env and env vars without touching the global env
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
@@ -28,13 +26,12 @@ class DBSettings(BaseSettings):
     DB_HOST: str = Field(default="localhost")
     DB_PORT: int = Field(default=3306)
     DB_NAME: Optional[str] = None
-    DB_DRIVER: str = Field(default="mariadb+pymysql")  # keep overridable
+    DB_DRIVER: str = Field(default="mariadb+pymysql")
 
     def build_url(self) -> str:
         if self.DATABASE_URL:
             return self.DATABASE_URL
 
-        # Compose URL if all required parts are present
         missing = [
             k
             for k in ("DB_USER", "DB_PASSWORD", "DB_NAME")
@@ -54,7 +51,6 @@ class DBSettings(BaseSettings):
         name = self.DB_NAME or ""
         driver = self.DB_DRIVER
 
-        # If password contains special chars, users should prefer DATABASE_URL.
         return f"{driver}://{user}:{pwd}@{host}:{port}/{name}"
 
 

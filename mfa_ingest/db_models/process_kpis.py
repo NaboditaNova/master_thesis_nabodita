@@ -126,7 +126,6 @@ class CollectionFlowKPI(Base):
     eps_items_amount_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     __table_args__ = (
-        # at least one KPI present
         CheckConstraint(
             "purity_amount IS NOT NULL "
             "OR attached_moisture_and_dirt_amount_value IS NOT NULL "
@@ -135,7 +134,6 @@ class CollectionFlowKPI(Base):
             "OR eps_items_amount_value IS NOT NULL",
             name="chk_kpi_at_least_one_value",
         ),
-        # pairing constraints
         CheckConstraint(
             "(purity_amount IS NULL AND purity_unit IS NULL) "
             "OR (purity_amount IS NOT NULL AND purity_unit IS NOT NULL AND CHAR_LENGTH(TRIM(purity_unit))>0)",
@@ -217,7 +215,6 @@ class SortingFlowKPI(Base):
     )
 
     __table_args__ = (
-        # At least one amount must be provided
         CheckConstraint(
             "maximum_total_amount_of_impurities_amount IS NOT NULL "
             "OR purity_amount IS NOT NULL "
@@ -230,7 +227,6 @@ class SortingFlowKPI(Base):
             "OR yield_of_ds_from_input_amount IS NOT NULL",
             name="chk_sort_flow_kpi_one_present",
         ),
-        # Pairing rules (amount -> non-blank unit)
         CheckConstraint(
             "maximum_total_amount_of_impurities_amount IS NULL "
             "OR NULLIF(TRIM(maximum_total_amount_of_impurities_unit), '') IS NOT NULL",
@@ -327,7 +323,6 @@ class RecyclingFlowKPI(Base):
     )
 
     __table_args__ = (
-        # at least one amount present
         CheckConstraint(
             "filtration_amount IS NOT NULL "
             "OR recyclate_polymer_purity_amount IS NOT NULL "
@@ -340,7 +335,6 @@ class RecyclingFlowKPI(Base):
             "OR yield_flow_sample_amount IS NOT NULL",
             name="chk_recycling_flow_kpi_one_present",
         ),
-        # pairing constraints (amount ↔ unit)
         CheckConstraint(
             "(filtration_amount IS NULL) "
             "OR (NULLIF(TRIM(filtration_unit), '') IS NOT NULL)",
@@ -389,5 +383,4 @@ class RecyclingFlowKPI(Base):
         {"mysql_engine": "InnoDB"},
     )
 
-    # backref: many FlowSample rows may point to one RecyclingFlowKPI
     flow_samples = relationship("FlowSample", back_populates="recycling_flow_kpi")

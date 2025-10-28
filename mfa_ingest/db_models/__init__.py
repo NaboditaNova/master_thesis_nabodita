@@ -1,6 +1,5 @@
-from .base import Base  # re-export
+from .base import Base
 
-# import model modules so their tables register on Base.metadata
 from .process_kpis import (
     CollectionProcessKPI,
     SortingProcessKPI,

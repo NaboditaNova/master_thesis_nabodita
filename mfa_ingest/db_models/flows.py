@@ -113,7 +113,6 @@ class FlowSample(Base):
     amount_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     __table_args__ = (
-        # value↔unit pairing
         CheckConstraint(
             "contamination IS NULL OR (contamination_unit IS NOT NULL AND TRIM(contamination_unit) <> '')",
             name="chk_flow_contamination_pair",
@@ -126,7 +125,6 @@ class FlowSample(Base):
             "amount_value IS NULL OR (amount_unit IS NOT NULL AND TRIM(amount_unit) <> '')",
             name="chk_flow_amount_pair",
         ),
-        # ranges
         CheckConstraint(
             "amount_value IS NULL OR amount_value >= 0", name="chk_flow_amount_nonneg"
         ),
@@ -138,7 +136,6 @@ class FlowSample(Base):
             "AND (oxygen_content_pct IS NULL OR (oxygen_content_pct BETWEEN 0 AND 100))",
             name="chk_flow_pct_ranges",
         ),
-        # “at least one data field”
         CheckConstraint(
             "(stakeholder_name IS NOT NULL AND CHAR_LENGTH(TRIM(stakeholder_name)) > 0) "
             "OR (sample_date IS NOT NULL) "
@@ -203,13 +200,11 @@ class FlowSampleComponent(Base):
     amount_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     __table_args__ = (
-        # Pairing: if amount_value non-blank -> amount_unit must be non-blank
         CheckConstraint(
             "NULLIF(TRIM(amount_value), '') IS NULL "
             "OR NULLIF(TRIM(amount_unit),  '') IS NOT NULL",
             name="chk_fsc_amount_pair",
         ),
-        # At least one of the descriptive fields present (avoid ghost rows)
         CheckConstraint(
             "NULLIF(TRIM(polymer_name), '') IS NOT NULL "
             "OR NULLIF(TRIM(description), '') IS NOT NULL "

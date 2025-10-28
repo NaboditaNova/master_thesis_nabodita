@@ -23,19 +23,14 @@ def map_all(wb: WorkbookFrames, cfg: Dict) -> List[ProcessPacket]:
     dfp = wb.get("process")
     dff = wb.get("flows")
 
-    # Resolve columns once (normalized)
     P = {k: _first_present(dfp, mp_proc, k) for k in mp_proc.keys()}
     F = {k: _first_present(dff, mp_flow, k) for k in mp_flow.keys()}
 
-    # Optional: you may have the sample/component data on the same flows sheet; if separate, read those as wb.get("...").
     S = {k: _first_present(dff, mp_sample, k) for k in mp_sample.keys()}
     C = {k: _first_present(dff, mp_comp, k) for k in mp_comp.keys()}
 
     packets: List[ProcessPacket] = []
 
-    # For simplicity, pair each process row with all following flow rows until next process marker;
-    # If your workbook links flows to process by a key/column, adjust this join accordingly.
-    # Here, we do a cartesian-by-row-index example: 1 process → all flows (adjust if needed).
     for _, prow in dfp.iterrows():
         ptype_raw = (prow.get("process_type") or "").strip()
         if ptype_raw not in ("Collection", "Sorting", "Recycling"):
@@ -61,7 +56,6 @@ def map_all(wb: WorkbookFrames, cfg: Dict) -> List[ProcessPacket]:
 
         flow_packets: List[FlowPacket] = []
         for _, frow in dff.iterrows():
-            # Flow
             f = FlowIn(
                 rownum=int(frow["__row__"]),
                 direction=_nz(frow.get(F.get("direction"))) or "Input",
@@ -71,7 +65,6 @@ def map_all(wb: WorkbookFrames, cfg: Dict) -> List[ProcessPacket]:
                 reference_text=_nz(frow.get(F.get("reference_text"))),
             )
 
-            # Sample (optional)
             s = FlowSampleIn(
                 rownum=int(frow["__row__"]),
                 stakeholder_name=_nz(frow.get(S.get("stakeholder_name"))),
@@ -97,7 +90,6 @@ def map_all(wb: WorkbookFrames, cfg: Dict) -> List[ProcessPacket]:
                 amount_unit=_nz(frow.get(S.get("amount_unit"))),
             )
 
-            # Components: minimal example assumes 1 component per row (extend if you have repeated columns)
             comp = ComponentIn(
                 rownum=int(frow["__row__"]),
                 polymer_name=_nz(frow.get(C.get("polymer_name"))),

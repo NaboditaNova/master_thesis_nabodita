@@ -41,13 +41,9 @@ def merge_mfa_into_packets(
     Mutates packets in-place; returns list of MFA material names that didn't match any flow
     but contained data (likely a column-name typo).
     """
-    # flow lookup
-    # Build a lookup: flow_name(lower) -> list of (FlowPacket, process_type)
     flow_lookup: Dict[str, List[Tuple[FlowPacket, ProcessType]]] = {}
     for p in packets:
-        ptype: ProcessType = (
-            p.process.process_type
-        )  # "Collection" | "Sorting" | "Recycling"
+        ptype: ProcessType = p.process.process_type
         for fp in p.flows:
             key = (fp.flow.material_name or "").strip().lower()
             flow_lookup.setdefault(key, []).append((fp, ptype))
@@ -58,17 +54,14 @@ def merge_mfa_into_packets(
         key = (mat_name or "").strip().lower()
         if key and key in flow_lookup:
             for fp, ptype in flow_lookup[key]:
-                # Sample
                 sample_d = payload.get("sample") or {}
                 if _has_any(sample_d):
                     fp.sample = FlowSampleIn(rownum=0, **sample_d)
 
-                # KPI: choose by process type
                 if ptype == "Collection":
                     kpi_d = payload.get("collection_kpi") or {}
                     if _has_any(kpi_d):
                         fp.collection_kpi = CollectionFlowKPIIn(**kpi_d)
-                    # clear others for safety
                     fp.sorting_kpi = None
                     fp.recycling_kpi = None
 
@@ -86,7 +79,6 @@ def merge_mfa_into_packets(
                     fp.collection_kpi = None
                     fp.sorting_kpi = None
 
-                # Components
                 comps = payload.get("components") or []
                 for c in comps:
                     if (

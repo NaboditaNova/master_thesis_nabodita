@@ -10,7 +10,6 @@ class ProcessIn(BaseModel):
     process_name: Optional[str] = None
     process_type: ProcessType
 
-    # Optional process-level KPIs captured from sheet (if present)
     collection_rate_amount: Optional[float] = None
     collection_rate_unit: Optional[str] = None
     collection_reference_text: Optional[str] = None

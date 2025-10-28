@@ -42,9 +42,9 @@ def read_grid(path: str, sheet_name: str) -> pd.DataFrame:
         header=None,
         dtype=str,
         keep_default_na=False,
-        engine_kwargs={"data_only": True},  # evaluate formulas
+        engine_kwargs={"data_only": True},
     )
-    # strip whitespace; pandas ≥2.3 prefers .map over .applymap
+
     df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
     return df
 
@@ -113,8 +113,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
     df = read_grid(path, scfg["sheet_name"])
     materials = _collect_materials_from_top_row(df)
 
-    # NEW: allow empty MFA sheet (no top headers/material columns)
-    # Default is True; set mfa_sheet.allow_empty_top_header: false in config to restore old behavior.
     allow_empty = (
         True
         if "allow_empty_top_header" not in scfg
@@ -122,15 +120,13 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
     )
     if not materials:
         if allow_empty:
-            return {}  # Gracefully skip MFA merge; nothing to parse
+            return {}
         else:
             raise ValueError("No material/flow columns found in top header row.")
 
-    # --- Stakeholder / Date (single-value per material, not Amount/Unit pairs) ---
     r_stk = _find_row_by_first_col(df, scfg["labels"]["stakeholder_name"])
     r_date = _find_row_by_first_col(df, scfg["labels"]["date"])
 
-    # Flexible ETL buckets: values can be str/float/None; annotate as Any to keep mypy happy
     per_mat: Dict[str, Dict[str, Any]] = {
         name: {
             "sample": {},
@@ -151,17 +147,13 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
         if r_date is not None:
             v = _n(df.iat[r_date, jcol])
             if v:
-                per_mat[name]["sample"][
-                    "sample_date"
-                ] = v  # keep raw; loader will parse
+                per_mat[name]["sample"]["sample_date"] = v
 
-    # Helper to fill sample fields from a 3-col section ("label","Amount","Unit") with per-material pairs
     def _fill_generic_like(section_key: str) -> None:
         title_row = _find_section_row(df, scfg["sections"][section_key])
         if title_row is None:
             return
-        # title_row has first cell like "Generic Data"; header row is title_row
-        # Next row is description; data start at title_row+2.
+
         header_row = title_row
         data_start = header_row + 2
         pairs = _pair_columns_for_section(
@@ -170,9 +162,8 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
         for r in range(data_start, df.shape[0]):
             key = _norm(df.iat[r, 0])
             if not key:
-                # heuristic: skip empty lines; real end is detected by next section title
                 continue
-            # stop on the next section title
+
             if key in (
                 _norm(scfg["sections"]["elementary"][0]),
                 _norm(scfg["sections"]["psd_collection"][0]),
@@ -182,7 +173,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
             ):
                 break
 
-            # --- Generic Data mapping (mix of text and numeric fields)
             if section_key == "generic_data":
                 gmap = scfg["map_generic_rows"]
                 if key in gmap:
@@ -201,15 +191,13 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         sample_generic: Dict[str, Any] = per_mat[mat_name]["sample"]
 
                         if vtype == "text":
-                            # Parse text value
                             aval_text: Optional[str] = _n(a_cell) or None
-                            # flag: value looks numeric (user put a number where text is expected)
-                            # (existing flagging for numeric-looking text can remain above)
+
                             if aval_text is not None and _looks_numeric(aval_text):
                                 per_mat[mat_name]["flags"].setdefault(
                                     "text_numeric", []
                                 ).append({"field": key, "value": aval_text})
-                            # flag: unit present where text-only row
+
                             if u_cell is not None and _n(u_cell):
                                 per_mat[mat_name]["flags"].setdefault(
                                     "text_unit_present", []
@@ -218,7 +206,7 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                             if fv and aval_text is not None:
                                 sample_generic[fv] = aval_text
                         else:
-                            # Parse numeric value
+
                             num_val_generic: Optional[float] = _to_float(a_cell)
                             if fv and num_val_generic is not None:
                                 sample_generic[fv] = num_val_generic
@@ -227,7 +215,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         if fu and uval_str:
                             sample_generic[fu] = uval_str
 
-            # --- Elementary composition (all numeric; units not allowed)
             elif section_key == "elementary":
                 emap = scfg["map_elementary_rows"]
                 if key in emap:
@@ -243,7 +230,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         if elem_val_num is not None:
                             sample_elem[emap[key]] = elem_val_num
 
-                        # flag: unit present even though this section should not provide units
                         if u_col != -1:
                             u_cell = df.iat[r, u_col]
                             if _n(u_cell):
@@ -251,7 +237,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                                     "elementary_unit_present", []
                                 ).append({"field": key, "unit": _n(u_cell)})
 
-            # --- Process Specific Data (Collection) → flow KPI (numeric + unit)
             elif section_key == "psd_collection":
                 cmap = scfg["map_collection_kpi_rows"]
                 if key in cmap:
@@ -265,11 +250,9 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         )
                         unit_str: str = _n(df.iat[r, u_col]) if (u_col != -1) else ""
 
-                        # Keep only rows that have some data (value or unit)
                         if val_num_kpi is None and not unit_str:
                             continue
 
-                        # ensure dict exists
                         kpi_dict: Dict[str, Any] = (
                             per_mat[mat_name]["collection_kpi"] or {}
                         )
@@ -282,7 +265,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         if fu and unit_str:
                             kpi_dict[fu] = unit_str
 
-            # --- Process Specific Data (Sorting) → flow KPI (numeric + unit)
             elif section_key == "psd_sorting":
                 smap = scfg["map_sorting_kpi_rows"]
                 if key in smap:
@@ -303,7 +285,6 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         if fu and _n(uval):
                             per_mat[mat_name]["sorting_kpi"][fu] = uval
 
-            # --- Process Specific Data (Recycling) → flow KPI (numeric + unit)
             elif section_key == "psd_recycling":
                 rmap = scfg["map_recycling_kpi_rows"]
                 if key in rmap:
@@ -324,26 +305,23 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         if fu and _n(uval):
                             per_mat[mat_name]["recycling_kpi"][fu] = uval
 
-    # Fill: Generic Data, Elementary, PSD (Collection)
     _fill_generic_like("generic_data")
     _fill_generic_like("elementary")
     _fill_generic_like("psd_collection")
-    _fill_generic_like("psd_sorting")  # NEW
-    _fill_generic_like("psd_recycling")  # NEW
+    _fill_generic_like("psd_sorting")
+    _fill_generic_like("psd_recycling")
 
-    # --- Material Composition (polymer_name/description + per-material amount/unit) ---
     mc_row = _find_section_row(df, scfg["sections"]["material_composition"])
     if mc_row is not None:
         header_row = mc_row
-        data_start = header_row + 2  # skip description row
+        data_start = header_row + 2
         pairs = _pair_columns_for_section(
             df, header_row, len(materials), scfg["subheaders"]["unit"]
         )
         for r in range(data_start, df.shape[0]):
-            key = _n(df.iat[r, 0])  # "Material Composition" (polymer name)
-            desc = _n(df.iat[r, 1])  # Description
+            key = _n(df.iat[r, 0])
+            desc = _n(df.iat[r, 1])
             if not key and not desc:
-                # if row entirely blank, likely end
                 continue
             for idx, (mat_name, _) in enumerate(materials):
                 if idx >= len(pairs):
@@ -353,7 +331,7 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                     _to_float(df.iat[r, a_col]) if a_col != -1 else None
                 )
                 uval_str: str = _n(df.iat[r, u_col]) if (u_col != -1) else ""
-                # Rule: if Description, Amount, Unit ALL empty -> skip, even if polymer name exists
+
                 if not desc and comp_val_num is None and not uval_str:
                     continue
                 comp: Dict[str, Any] = {

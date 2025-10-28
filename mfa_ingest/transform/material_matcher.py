@@ -14,7 +14,6 @@ def _canon(s: Optional[str]) -> str:
 
 
 def _token_set_ratio(a: str, b: str) -> float:
-    # simple Jaccard-like score (0..1)
     sa, sb = set(a.split()), set(b.split())
     if not sa or not sb:
         return 0.0
@@ -26,7 +25,6 @@ def _token_set_ratio(a: str, b: str) -> float:
 def _best_match(
     query: str, candidates: List[Tuple[str, str]]
 ) -> Tuple[Optional[str], float]:
-    # candidates: list of (display_name, canonical_string)
     cq = _canon(query)
     best_name, best_score = None, 0.0
     for disp, cc in candidates:
@@ -56,7 +54,6 @@ def match_components_to_materials(
     }
     hard = {k.lower(): v for k, v in (scfg.get("hardcode_map") or {}).items()}
 
-    # Build candidate strings for each material
     cand: List[Tuple[str, str]] = []
     mat_names: set[str] = set()
     for m in materials:
@@ -73,7 +70,6 @@ def match_components_to_materials(
         )
         cand.append((disp, blobs))
 
-    # Also add synonyms as aliases
     for canonical, alts in synonyms.items():
         cand.append((canonical, _canon(canonical)))
         for a in alts:
@@ -90,14 +86,12 @@ def match_components_to_materials(
                 if not source:
                     continue
 
-                # hardcode wins
                 hc = hard.get(source.lower())
                 if hc:
                     comp.material_name_suggested = hc
                     comp.material_match_score = 1.0
                     continue
 
-                # try best match
                 match, score = _best_match(source, cand)
                 if match and score >= min_score:
                     comp.material_name_suggested = match

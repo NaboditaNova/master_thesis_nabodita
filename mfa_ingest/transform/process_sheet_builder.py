@@ -7,10 +7,9 @@ from ..schemas.flow import FlowIn, FlowPacket, ProcessPacket
 def build_packets_from_process_dict(d: Dict) -> List[ProcessPacket]:
     pinfo = d["process"]
     process = ProcessIn(
-        rownum=1,  # synthetic row index (we operate on a form, not a tabular row)
+        rownum=1,
         process_name=pinfo.get("process_name"),
         process_type=pinfo["process_type"],
-        # stash process-level KPI hints on ProcessIn for the loader to act on:
         collection_rate_amount=(
             pinfo["kpi"].get("collection_rate_amount")
             if pinfo.get("kpi") and pinfo["kpi"]["table"] == "collection_process_kpi"

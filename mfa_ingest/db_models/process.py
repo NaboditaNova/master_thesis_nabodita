@@ -48,7 +48,6 @@ class Process(Base):
         nullable=True,
     )
 
-    # Relationships
     collection_kpi = relationship("CollectionProcessKPI", back_populates="process")
     sorting_kpi = relationship("SortingProcessKPI", back_populates="process")
     recycling_kpi = relationship("RecyclingProcessKPI", back_populates="process")

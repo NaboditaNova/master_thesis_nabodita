@@ -12,8 +12,7 @@ def read_grid(path: str, sheet_name: str) -> pd.DataFrame:
         dtype=str,
         keep_default_na=False,
     )
-    # was: df = df.applymap(...)
-    # pandas ≥2.3: DataFrame.applymap is deprecated → use DataFrame.map
+
     df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
     return df
 
@@ -80,7 +79,6 @@ def extract_table_rows(
     cols = resolve_header_positions(header_row, df, header_map)
     rows: List[int] = []
     for r in range(data_start, data_end):
-        # consider a row "blank" if all mapped columns are empty
         if all(n(df.iat[r, c]) == "" for c in cols.values()):
             continue
         rows.append(r)
@@ -132,12 +130,10 @@ def parse_process_sheet(path: str, cfg: Dict) -> Dict:
     sheet_name = ps_cfg["sheet_name"]
     df = read_grid(path, sheet_name)
 
-    # 1) Process header
     process_name, process_type = parse_process_block(df, ps_cfg["labels"])
     if not process_type:
         raise ValueError("Process type is empty.")
 
-    # 2) section row indexes
     in_row = find_row_starting_with(df, ps_cfg["sections"]["input_flows_title"])
     tech_row = find_row_starting_with(df, ps_cfg["sections"]["technology_title"])
     out_row = find_row_starting_with(df, ps_cfg["sections"]["output_flows_title"])
@@ -146,7 +142,6 @@ def parse_process_sheet(path: str, cfg: Dict) -> Dict:
             "Could not locate one or more sections (Input flows / Technology / Output flows)."
         )
 
-    # 3) Input flows
     in_cols, in_rows = extract_table_rows(
         df, in_row, tech_row, ps_cfg["input_flows"]["header_map"]
     )
@@ -160,9 +155,7 @@ def parse_process_sheet(path: str, cfg: Dict) -> Dict:
         value = to_float(df.iat[r, in_cols["value"]]) if "value" in in_cols else None
         unit = n(df.iat[r, in_cols["unit"]]) if "unit" in in_cols else ""
         ref = n(df.iat[r, in_cols["reference"]]) if "reference" in in_cols else ""
-        # skip if all 5 fields are empty
-        # 🚫 NEW: drop rows that contain only the flag (no other data)
-        # Keep the row only if at least one of {name, value, unit, ref} is present.
+
         if not any([name, value is not None, unit, ref]):
             continue
         input_flows.append(
@@ -175,7 +168,6 @@ def parse_process_sheet(path: str, cfg: Dict) -> Dict:
             }
         )
 
-    # 4) Output flows
     out_cols, out_rows = extract_table_rows(
         df, out_row, None, ps_cfg["output_flows"]["header_map"]
     )
@@ -190,7 +182,6 @@ def parse_process_sheet(path: str, cfg: Dict) -> Dict:
         unit = n(df.iat[r, out_cols["unit"]]) if "unit" in out_cols else ""
         ref = n(df.iat[r, out_cols["reference"]]) if "reference" in out_cols else ""
 
-        # 🚫 NEW: drop rows that contain only the flag (no other data)
         if not any([name, value is not None, unit, ref]):
             continue
         output_flows.append(
@@ -203,7 +194,6 @@ def parse_process_sheet(path: str, cfg: Dict) -> Dict:
             }
         )
 
-    # 5) Technology → process-level KPI for the selected type
     tech_cols, tech_rows = extract_table_rows(
         df, tech_row, out_row, ps_cfg["technology"]["header_map"]
     )

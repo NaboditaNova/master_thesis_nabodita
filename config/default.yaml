@@ -13,7 +13,6 @@ mapping:
     columns:
       process_name: ["Process Name", "Process", "Name"]
       process_type: ["Type", "Process Type"]
-      # Optional process-level KPI fields (if present in sheet; else ignore)
       collection_rate_amount: ["Collection Rate Amount"]
       collection_rate_unit: ["Collection Rate Unit"]
       sorting_yield_amount: ["Sorting Yield Amount"]
@@ -57,14 +56,13 @@ mapping:
 process_sheet:
   sheet_name: "Process"
   labels:
-    process_label: ["process"]                  # left cell text for process_name
+    process_label: ["process"]
     process_type_label: ["process typ","process type"]
   sections:
     input_flows_title: ["input flows"]
     technology_title: ["technology"]
     output_flows_title: ["output flows"]
   input_flows:
-    # we only keep rows whose 'Input' col equals this value
     keep_value_in_input_col: ["input material"]
     header_map:
       input: ["input"]
@@ -103,7 +101,6 @@ mfa_sheet:
   sheet_name: "MFA&Material_quality_Template"
   allow_empty_top_header: true
 
-  # fixed header in row 1 (index 0): first two labels, then one column per material/flow name
   top_headers:
     name_of_sample: ["name of the sample(flow)"]
     description: ["description"]
@@ -116,8 +113,8 @@ mfa_sheet:
     generic_data: ["generic data"]
     elementary: ["elementary composition"]
     psd_collection: ["process specific data (collection)"]
-    psd_sorting: ["process specific data (sorting)"]      # placeholder (not in DB yet)
-    psd_recycling: ["process specific data (recycling)"]  # placeholder (not in DB yet)
+    psd_sorting: ["process specific data (sorting)"]
+    psd_recycling: ["process specific data (recycling)"]
     material_composition: ["material composition"]
 
   subheaders:
@@ -145,7 +142,6 @@ mfa_sheet:
     residual waste share: {field_value: "residual_waste_share_amount_value", field_unit: "residual_waste_share_amount_unit"}
     expanded polystyrene (eps) items: {field_value: "eps_items_amount_value", field_unit: "eps_items_amount_unit"}
 
-  # NEW: Sorting PSD → sorting_flow_kpi
   map_sorting_kpi_rows:
     maximum_total_amount_of_impurities: {field_value: "maximum_total_amount_of_impurities_amount", field_unit: "maximum_total_amount_of_impurities_unit"}
     sorting purity spec wt pct: {field_value: "purity_amount", field_unit: "purity_unit"}
@@ -157,7 +153,6 @@ mfa_sheet:
     colourless,transparent foils: {field_value: "colourless_transparent_foils_amount", field_unit: "colourless_transparent_foils_unit"}
     yield_of_ds_from_input: {field_value: "yield_of_ds_from_input_amount", field_unit: "yield_of_ds_from_input_unit"}
 
-  # NEW: Recycling PSD → recycling_flow_kpi
   map_recycling_kpi_rows:
     filtration: {field_value: "filtration_amount", field_unit: "filtration_unit"}
     recyclate polymer purity dry wt pct: {field_value: "recyclate_polymer_purity_amount", field_unit: "recyclate_polymer_purity_unit"}
@@ -187,7 +182,6 @@ material_sheet:
     sorting_guidelines: ["Sorting Guidelines"]
     din_spec_91446_comments: ["DIN SPEC 91446 Comments"]
 
-  # optional normalization helpers for matching
   synonyms:
     "non-ferrous metals":
       - "aluminium-containing / non-ferrous metal"

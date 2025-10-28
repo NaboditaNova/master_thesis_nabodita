@@ -43,11 +43,9 @@ def validate(
     with open(config, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    # Process -> packets
     pdata = parse_process_sheet(xlsm, cfg)
     packets = build_packets_from_process_dict(pdata)
 
-    # MFA -> per-material (with flags), then merge
     mfa = parse_mfa_sheet(xlsm, cfg)
 
     if not mfa:
@@ -59,7 +57,6 @@ def validate(
 
     issues = validate_packets(packets)
 
-    # --- PSD exclusivity rules (HARD ERRORS) ---
     def _has_any_local(d: dict | None) -> bool:
         """True if any non-empty value is present in a dict."""
         if not d:
@@ -72,7 +69,6 @@ def validate(
             return True
         return False
 
-    # Map flow name -> process type
     flow_to_ptype: Dict[str, str] = {}
     for p in packets:
         for fp in p.flows:
@@ -84,7 +80,6 @@ def validate(
         key = (mat_name or "").strip().lower()
         ptype = flow_to_ptype.get(key)
         if not ptype:
-            # unmatched material names are handled elsewhere
             continue
 
         ck = payload.get("collection_kpi") or {}
@@ -92,7 +87,6 @@ def validate(
         rk = payload.get("recycling_kpi") or {}
 
         if ptype == "Sorting":
-            # Only "Process Specific Data (Sorting)" may have data.
             if _has_any_local(ck):
                 issues.append(
                     Issue(
@@ -113,7 +107,6 @@ def validate(
                 )
 
         elif ptype == "Collection":
-            # Only "Process Specific Data (Collection)" may have data.
             if _has_any_local(sk):
                 issues.append(
                     Issue(
@@ -134,7 +127,6 @@ def validate(
                 )
 
         elif ptype == "Recycling":
-            # Only "Process Specific Data (Recycling)" may have data.
             if _has_any_local(ck):
                 issues.append(
                     Issue(
@@ -154,7 +146,6 @@ def validate(
                     )
                 )
 
-    # A) Orphan MFA columns with data
     for name in unmatched:
         issues.append(
             Issue(
@@ -164,7 +155,6 @@ def validate(
             )
         )
 
-    # B) Flags from parser: text rows numeric / stray units / elementary units
     for mat_name, payload in mfa.items():
         flags = payload.get("flags") or {}
         for it in flags.get("text_numeric", []):
@@ -192,17 +182,13 @@ def validate(
                 )
             )
 
-    # NEW: optional material sheet checks + component→material suggestions
     if check_materials:
         from .extract.material_sheet_parser import parse_material_sheet
         from .transform.material_matcher import match_components_to_materials
 
         mats = parse_material_sheet(xlsm, cfg)
-        # basic sanity: at least one field must be non-empty; already enforced by parser
 
-        # add suggestions to components; collect low-confidence items
         low = match_components_to_materials(packets, mats, cfg)
-        # IMPORTANT: When --check-materials, these are WARNINGS, not hard validation issues.
         if low:
             typer.echo("\n⚠ Material match warnings (low/none confidence):")
             for flow_name, items in low.items():
@@ -227,7 +213,7 @@ def plan(
     config: str = "config/default.yaml",
     json_out: bool = False,
     show_components: bool = True,
-    show_rownums: bool = False,  # <- NEW: show internal row numbers if you really want them
+    show_rownums: bool = False,
     materials: bool = False,
 ):
     """
@@ -243,7 +229,6 @@ def plan(
     import json
 
     def compact(d: dict) -> dict:
-        # Remove empty values; hide 'rownum' unless explicitly requested
         return {
             k: v
             for k, v in d.items()
@@ -253,7 +238,6 @@ def plan(
     with open(config, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    # Build packets: Process sheet + MFA sheet merged
     pdata = parse_process_sheet(xlsm, cfg)
     packets = build_packets_from_process_dict(pdata)
     mfa = parse_mfa_sheet(xlsm, cfg)
@@ -275,7 +259,6 @@ def plan(
         }
     )
 
-    # Counters for pseudo-IDs
     s_counter = 0  # flow_sample
     c_counter = 0  # flow_sample_component
 
@@ -292,7 +275,6 @@ def plan(
     print("\nTable: process")
     print(f"  id: P1 -> {process_row}")
 
-    # Show process-level KPI if present on ProcessIn (builder attaches these)
     proc = packets[0].process
     if getattr(proc, "collection_rate_amount", None) is not None:
         prow = compact(
@@ -370,7 +352,6 @@ def plan(
         if fp.sample:
             s_counter += 1
             S_ID = f"S{s_counter}"
-            # drop internal 'rownum' from preview
             srow = compact(fp.sample.model_dump(exclude_none=True))
             srow = {
                 "material_flow_id": F_ID,
@@ -393,7 +374,6 @@ def plan(
                 if not show_components:
                     print(f"          (total components hidden: {len(fp.components)})")
 
-    # Counts summary
     result = {
         "process": 1,
         "collection_process_kpi": c_pk_counter,
@@ -460,9 +440,9 @@ def load(
     replace_process_by_name: bool = False,
     materials: bool = False,
     auto_create_materials: bool = False,
-    dry_run: bool = False,  # <- NEW
-    database_url: Optional[str] = None,  # <- NEW (override)
-    echo_sql: bool = False,  # <- NEW (debug)
+    dry_run: bool = False,
+    database_url: Optional[str] = None,
+    echo_sql: bool = False,
 ):
     """
     Load the given workbook into MariaDB.
@@ -486,22 +466,19 @@ def load(
     with open(config, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    # Build packets (Process + MFA)
     pdata = parse_process_sheet(xlsm, cfg)
     packets = build_packets_from_process_dict(pdata)
     mfa = parse_mfa_sheet(xlsm, cfg)
-    _unmatched = merge_mfa_into_packets(packets, mfa)  # validation should catch these
+    _unmatched = merge_mfa_into_packets(packets, mfa)
 
     mats = parse_material_sheet(xlsm, cfg) if materials else []
 
-    # DB session
     echo: EchoT = "debug" if echo_sql else False
     engine = get_engine(database_url_override=database_url, echo=echo)
     with get_session(engine) as session:
         try:
             session.begin()
             mat_cfg = cfg.get("material_sheet", {})
-            # normalize to lowercase for robust matches
             hmap_src = mat_cfg.get("hardcode_map") or {}
             hardcode_map = {
                 (k or "").strip().lower(): (v or "").strip().lower()
@@ -519,13 +496,12 @@ def load(
                 replace_process_by_name=replace_process_by_name,
                 materials=mats,
                 auto_create_materials=auto_create_materials,
-                hardcode_map=hardcode_map,  # <-- pass in
-                synonyms=synonyms,  # <-- pass in
+                hardcode_map=hardcode_map,
+                synonyms=synonyms,
             )
             result = load_packets(session, packets, opts)
 
             if dry_run:
-                # Don't persist anything; this mimics everything except the final commit
                 session.rollback()
             else:
                 session.commit()
@@ -534,7 +510,6 @@ def load(
             session.rollback()
             raise
 
-    # Pretty summary
     print("\n=== LOAD SUMMARY ===")
     if dry_run:
         print("  (DRY RUN: no changes were committed)")
@@ -590,15 +565,12 @@ def walk(
         "validate", help="Which action to run on each .xlsm"
     ),
     config: str = "config/default.yaml",
-    # validate options
     check_materials: bool = typer.Option(
         False, "--check-materials", help="During validate, also check material sheet"
     ),
-    # plan options
     materials: bool = typer.Option(
         False, help="Plan: preview materials (first 20) and suggestions"
     ),
-    # load options
     replace_process_by_name: bool = False,
     auto_create_materials: bool = False,
     dry_run: bool = False,
@@ -618,9 +590,8 @@ def walk(
             return 1
         if "recycling" in n:
             return 2
-        return 3  # unknown last
+        return 3
 
-    # find files
     root = Path(folder)
     files = sorted(root.rglob("*.xlsm"), key=lambda p: (_infer_order(p), str(p)))
 
@@ -645,13 +616,11 @@ def walk(
         try:
             if action == "validate":
                 try:
-                    # Call the existing validate function directly
                     validate(
                         xlsm=str(fp), config=config, check_materials=check_materials
                     )
                     ok += 1
                 except typer.Exit as e:
-                    # validate raises on issues; treat as failure and continue
                     fail += 1
                     typer.echo(
                         f"❌ Validation failed on {fp.name} (exit code {e.exit_code}). Continuing."
@@ -659,7 +628,7 @@ def walk(
             elif action == "plan":
                 plan(xlsm=str(fp), config=config, materials=materials)
                 ok += 1
-            else:  # load
+            else:
                 load(
                     xlsm=str(fp),
                     config=config,
@@ -680,7 +649,6 @@ def walk(
     typer.echo(f"  OK:     {ok}")
     typer.echo(f"  Failed: {fail}")
     typer.echo(f"  Total:  {total}")
-    # Non-zero exit if anything failed, so CI can catch it
     if fail:
         raise typer.Exit(code=1)
 

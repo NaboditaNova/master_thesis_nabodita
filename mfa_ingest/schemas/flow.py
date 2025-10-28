@@ -20,7 +20,6 @@ def _to_float_or_none(v):
     s = str(v).strip()
     if not s:
         return None
-    # handle German decimal comma
     s = s.replace(",", ".")
     try:
         return float(s)
@@ -29,7 +28,6 @@ def _to_float_or_none(v):
 
 
 def _keep_text_or_none(v):
-    # Keep textual values as-is (used for ComponentIn.amount_value which is VARCHAR(20) in DB)
     if v is None:
         return None
     s = str(v).strip()
@@ -53,7 +51,7 @@ class FlowIn(BaseModel):
 class FlowSampleIn(BaseModel):
     rownum: int
     stakeholder_name: Optional[str] = None
-    sample_date: Optional[str] = None  # keep as string; DB DATE parse happens later
+    sample_date: Optional[str] = None
     contamination: Optional[float] = None
     contamination_unit: Optional[str] = None
     moisture_condition: Optional[str] = None
@@ -97,15 +95,12 @@ class ComponentIn(BaseModel):
     description: Optional[str] = None
     amount_value: Optional[str] = None
     amount_unit: Optional[str] = None
-    # NEW: material linking hints (not DB columns)
     material_name_suggested: Optional[str] = None
     material_match_score: Optional[float] = None
 
     _n = field_validator("polymer_name", "description", "amount_unit", mode="before")(
         _blank_to_none
     )
-    # _f = field_validator("amount_value", mode="before")(_to_float_or_none)
-    # Keep the original text; do NOT coerce to float here
     _t = field_validator("amount_value", mode="before")(_keep_text_or_none)
 
 
@@ -164,7 +159,6 @@ class RecyclingFlowKPIIn(BaseModel):
     yield_flow_sample_unit: str | None = None
 
 
-# Higher-level grouping that the loader will consume
 class ProcessPacket(BaseModel):
     process: "ProcessIn"
     flows: list["FlowPacket"]
@@ -179,6 +173,5 @@ class FlowPacket(BaseModel):
     recycling_kpi: Optional["RecyclingFlowKPIIn"] = None
 
 
-# forward refs
 ProcessPacket.model_rebuild()
 FlowPacket.model_rebuild()
