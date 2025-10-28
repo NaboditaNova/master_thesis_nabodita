@@ -1,6 +1,6 @@
 from __future__ import annotations
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Union, Literal
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -8,6 +8,8 @@ from sqlalchemy.orm import sessionmaker, Session
 # Use pydantic-settings to read .env and env vars without touching the global env
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
+EchoT = Union[bool, Literal["debug", "trace"]]
 
 
 class DBSettings(BaseSettings):
@@ -57,7 +59,7 @@ class DBSettings(BaseSettings):
 
 
 def get_engine(
-    database_url_override: Optional[str] = None, echo: bool = False
+    database_url_override: Optional[str] = None, echo: EchoT = False
 ) -> Engine:
     """
     Build a SQLAlchemy engine using:

@@ -101,6 +101,7 @@ process_sheet:
 
 mfa_sheet:
   sheet_name: "MFA&Material_quality_Template"
+  allow_empty_top_header: true
 
   # fixed header in row 1 (index 0): first two labels, then one column per material/flow name
   top_headers:
@@ -225,6 +226,7 @@ material_sheet:
     "Fiber-Reinforced Plastics (FRP)": "Fiber-Reinforced Plastics (FRP)"
     "Folien": "Folien"
     "Weißblech (tinplate)": "Weißblech (tinplate)"
+    "Tinplate (Weißblech)": "Weißblech (tinplate)"
     "PET Trays": "PET Trays"
     "Mixed PET (90-10)": "Mixed PET (90-10)"
     "Substitute Fuel": "Substitute Fuel"

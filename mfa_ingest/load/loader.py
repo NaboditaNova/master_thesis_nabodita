@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+import re
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -34,21 +35,36 @@ from ..schemas.material import MaterialIn
 
 
 # ---------- small helpers ----------
-
-
 def _parse_date_maybe(s: Optional[str]) -> Optional[date]:
-    """
-    Accept common formats: dd.mm.yyyy, yyyy-mm-dd, dd/mm/yyyy
-    Leave None if not parseable.
-    """
-    if not s or not str(s).strip():
+    if not s:
         return None
-    t = str(s).strip()
-    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+    t = str(s).strip().replace("\u00a0", " ")
+    if not t:
+        return None
+
+    # Try common text formats (with/without time)
+    for fmt in (
+        "%d.%m.%Y",
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%d.%m.%Y %H:%M",
+    ):
         try:
             return datetime.strptime(t, fmt).date()
         except ValueError:
-            continue
+            pass
+
+    # Optional: Excel serials (e.g., 45500)
+    if re.fullmatch(r"\d{4,6}", t):
+        try:
+            n = int(t)
+            if 1 <= n <= 600000:
+                return date(1899, 12, 30) + timedelta(days=n)
+        except ValueError:
+            pass
+
     return None
 
 
@@ -247,20 +263,21 @@ def load_packets(
                 session.delete(existing_proc)
                 session.flush()
 
-        # 1a) Insert process-level KPI (if present in packet.process_kpi)
+        # 1a) Insert process-level KPI (read from packet.process)
+        proc_in = packet.process
         process_kpi_id: Optional[int] = None
         kpi_table: Optional[str] = None
 
-        kind, k = _extract_process_kpi(packet)
         if (
-            packet.process.process_type == "Collection"
-            and kind == "collection"
-            and k is not None
+            proc_in.process_type == "Collection"
+            and getattr(proc_in, "collection_rate_amount", None) is not None
         ):
             obj = CollectionProcessKPI(
-                collection_rate_amount=k.collection_rate_amount,
-                amount_unit=_nonblank(getattr(k, "collection_rate_unit", None)),
-                reference_text=_nonblank(getattr(k, "collection_reference_text", None)),
+                collection_rate_amount=proc_in.collection_rate_amount,
+                amount_unit=_nonblank(getattr(proc_in, "collection_rate_unit", None)),
+                reference_text=_nonblank(
+                    getattr(proc_in, "collection_reference_text", None)
+                ),
             )
             session.add(obj)
             session.flush()
@@ -269,14 +286,15 @@ def load_packets(
             kpi_table = "collection"
 
         elif (
-            packet.process.process_type == "Sorting"
-            and kind == "sorting"
-            and k is not None
+            proc_in.process_type == "Sorting"
+            and getattr(proc_in, "sorting_yield_amount", None) is not None
         ):
             obj = SortingProcessKPI(
-                sorting_yield_amount=k.sorting_yield_amount,
-                amount_unit=_nonblank(getattr(k, "sorting_yield_unit", None)),
-                reference_text=_nonblank(getattr(k, "sorting_reference_text", None)),
+                sorting_yield_amount=proc_in.sorting_yield_amount,
+                amount_unit=_nonblank(getattr(proc_in, "sorting_yield_unit", None)),
+                reference_text=_nonblank(
+                    getattr(proc_in, "sorting_reference_text", None)
+                ),
             )
             session.add(obj)
             session.flush()
@@ -285,14 +303,15 @@ def load_packets(
             kpi_table = "sorting"
 
         elif (
-            packet.process.process_type == "Recycling"
-            and kind == "recycling"
-            and k is not None
+            proc_in.process_type == "Recycling"
+            and getattr(proc_in, "recycling_yield_amount", None) is not None
         ):
             obj = RecyclingProcessKPI(
-                recycling_yield_amount=k.recycling_yield_amount,
-                amount_unit=_nonblank(getattr(k, "recycling_yield_unit", None)),
-                reference_text=_nonblank(getattr(k, "recycling_reference_text", None)),
+                recycling_yield_amount=proc_in.recycling_yield_amount,
+                amount_unit=_nonblank(getattr(proc_in, "recycling_yield_unit", None)),
+                reference_text=_nonblank(
+                    getattr(proc_in, "recycling_reference_text", None)
+                ),
             )
             session.add(obj)
             session.flush()
