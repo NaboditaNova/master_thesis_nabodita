@@ -42,6 +42,7 @@ def read_grid(path: str, sheet_name: str) -> pd.DataFrame:
         header=None,
         dtype=str,
         keep_default_na=False,
+        engine_kwargs={"data_only": True},  # evaluate formulas
     )
     # strip whitespace; pandas ≥2.3 prefers .map over .applymap
     df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
@@ -111,8 +112,19 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
     scfg = cfg["mfa_sheet"]
     df = read_grid(path, scfg["sheet_name"])
     materials = _collect_materials_from_top_row(df)
+
+    # NEW: allow empty MFA sheet (no top headers/material columns)
+    # Default is True; set mfa_sheet.allow_empty_top_header: false in config to restore old behavior.
+    allow_empty = (
+        True
+        if "allow_empty_top_header" not in scfg
+        else bool(scfg["allow_empty_top_header"])
+    )
     if not materials:
-        raise ValueError("No material/flow columns found in top header row.")
+        if allow_empty:
+            return {}  # Gracefully skip MFA merge; nothing to parse
+        else:
+            raise ValueError("No material/flow columns found in top header row.")
 
     # --- Stakeholder / Date (single-value per material, not Amount/Unit pairs) ---
     r_stk = _find_row_by_first_col(df, scfg["labels"]["stakeholder_name"])

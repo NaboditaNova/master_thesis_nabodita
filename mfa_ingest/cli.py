@@ -5,8 +5,10 @@ from .extract.process_sheet_parser import parse_process_sheet
 from .transform.process_sheet_builder import build_packets_from_process_dict
 from .extract.mfa_sheet_parser import parse_mfa_sheet
 from .transform.merge_mfa_with_process import merge_mfa_into_packets
-from typing import Optional, Dict
+from typing import Optional, Dict, Union, Literal
+from pathlib import Path
 
+EchoT = Union[bool, Literal["debug", "trace"]]
 app = typer.Typer(no_args_is_help=True)
 
 
@@ -47,6 +49,12 @@ def validate(
 
     # MFA -> per-material (with flags), then merge
     mfa = parse_mfa_sheet(xlsm, cfg)
+
+    if not mfa:
+        typer.echo(
+            "ℹ No MFA columns found in 'MFA&Material_quality_Template'; continuing with process-only validation."
+        )
+
     unmatched = merge_mfa_into_packets(packets, mfa)
 
     issues = validate_packets(packets)
@@ -194,15 +202,15 @@ def validate(
 
         # add suggestions to components; collect low-confidence items
         low = match_components_to_materials(packets, mats, cfg)
-        for flow_name, items in low.items():
-            for it in items:
-                issues.append(
-                    Issue(
-                        "Material match",
-                        0,
-                        f"{flow_name!r}: component {it['component']!r} has low/none match (score={it['score']}); suggestion={it['suggestion']!r}",
+        # IMPORTANT: When --check-materials, these are WARNINGS, not hard validation issues.
+        if low:
+            typer.echo("\n⚠ Material match warnings (low/none confidence):")
+            for flow_name, items in low.items():
+                for it in items:
+                    typer.echo(
+                        f"  - {flow_name!r}: component {it['component']!r} has low/none match "
+                        f"(score={it['score']}); suggestion={it['suggestion']!r}"
                     )
-                )
 
     if issues:
         typer.echo("❌ Validation issues found:")
@@ -249,6 +257,10 @@ def plan(
     pdata = parse_process_sheet(xlsm, cfg)
     packets = build_packets_from_process_dict(pdata)
     mfa = parse_mfa_sheet(xlsm, cfg)
+
+    if not mfa:
+        print("\n(ℹ MFA sheet has no material columns; nothing to merge.)")
+
     merge_mfa_into_packets(packets, mfa)
 
     if not packets:
@@ -483,39 +495,40 @@ def load(
     mats = parse_material_sheet(xlsm, cfg) if materials else []
 
     # DB session
-    engine = get_engine(database_url_override=database_url, echo=echo_sql)
+    echo: EchoT = "debug" if echo_sql else False
+    engine = get_engine(database_url_override=database_url, echo=echo)
     with get_session(engine) as session:
         try:
-            with session.begin():
-                mat_cfg = cfg.get("material_sheet", {})
-                # normalize to lowercase for robust matches
-                hmap_src = mat_cfg.get("hardcode_map") or {}
-                hardcode_map = {
-                    (k or "").strip().lower(): (v or "").strip().lower()
-                    for k, v in hmap_src.items()
-                }
+            session.begin()
+            mat_cfg = cfg.get("material_sheet", {})
+            # normalize to lowercase for robust matches
+            hmap_src = mat_cfg.get("hardcode_map") or {}
+            hardcode_map = {
+                (k or "").strip().lower(): (v or "").strip().lower()
+                for k, v in hmap_src.items()
+            }
 
-                syn_src = mat_cfg.get("synonyms") or {}
-                synonyms = {
-                    (canon or "")
-                    .strip()
-                    .lower(): [(a or "").strip().lower() for a in (aliases or [])]
-                    for canon, aliases in syn_src.items()
-                }
-                opts = LoadOptions(
-                    replace_process_by_name=replace_process_by_name,
-                    materials=mats,
-                    auto_create_materials=auto_create_materials,
-                    hardcode_map=hardcode_map,  # <-- pass in
-                    synonyms=synonyms,  # <-- pass in
-                )
-                result = load_packets(session, packets, opts)
+            syn_src = mat_cfg.get("synonyms") or {}
+            synonyms = {
+                (canon or "")
+                .strip()
+                .lower(): [(a or "").strip().lower() for a in (aliases or [])]
+                for canon, aliases in syn_src.items()
+            }
+            opts = LoadOptions(
+                replace_process_by_name=replace_process_by_name,
+                materials=mats,
+                auto_create_materials=auto_create_materials,
+                hardcode_map=hardcode_map,  # <-- pass in
+                synonyms=synonyms,  # <-- pass in
+            )
+            result = load_packets(session, packets, opts)
 
-                if dry_run:
-                    # Don't persist anything; this mimics everything except the final commit
-                    session.rollback()
-                else:
-                    session.commit()
+            if dry_run:
+                # Don't persist anything; this mimics everything except the final commit
+                session.rollback()
+            else:
+                session.commit()
 
         except:
             session.rollback()
@@ -568,6 +581,108 @@ def load(
     )
 
     print(f"\nTotal operations (logical): {total}")
+
+
+@app.command()
+def walk(
+    folder: str,
+    action: Literal["validate", "plan", "load"] = typer.Option(
+        "validate", help="Which action to run on each .xlsm"
+    ),
+    config: str = "config/default.yaml",
+    # validate options
+    check_materials: bool = typer.Option(
+        False, "--check-materials", help="During validate, also check material sheet"
+    ),
+    # plan options
+    materials: bool = typer.Option(
+        False, help="Plan: preview materials (first 20) and suggestions"
+    ),
+    # load options
+    replace_process_by_name: bool = False,
+    auto_create_materials: bool = False,
+    dry_run: bool = False,
+    database_url: Optional[str] = None,
+    echo_sql: bool = False,
+):
+    """
+    Recursively find *.xlsm under FOLDER and run the chosen action in order:
+    Collection → Sorting → Recycling (detected via filename).
+    """
+
+    def _infer_order(p: Path) -> int:
+        n = p.name.lower()
+        if "collection" in n:
+            return 0
+        if "sorting" in n:
+            return 1
+        if "recycling" in n:
+            return 2
+        return 3  # unknown last
+
+    # find files
+    root = Path(folder)
+    files = sorted(root.rglob("*.xlsm"), key=lambda p: (_infer_order(p), str(p)))
+
+    if not files:
+        typer.echo(f"No .xlsm files found under: {folder}")
+        raise typer.Exit(code=0)
+
+    total = len(files)
+    ok = 0
+    fail = 0
+
+    typer.echo(
+        f"Discovered {total} workbook(s). Running '{action}' in ordered sequence..."
+    )
+
+    for fp in files:
+        prefix = {0: "Collection", 1: "Sorting", 2: "Recycling", 3: "Other"}[
+            _infer_order(fp)
+        ]
+        typer.echo(f"\n=== {action.upper()} :: [{prefix}] {fp} ===")
+
+        try:
+            if action == "validate":
+                try:
+                    # Call the existing validate function directly
+                    validate(
+                        xlsm=str(fp), config=config, check_materials=check_materials
+                    )
+                    ok += 1
+                except typer.Exit as e:
+                    # validate raises on issues; treat as failure and continue
+                    fail += 1
+                    typer.echo(
+                        f"❌ Validation failed on {fp.name} (exit code {e.exit_code}). Continuing."
+                    )
+            elif action == "plan":
+                plan(xlsm=str(fp), config=config, materials=materials)
+                ok += 1
+            else:  # load
+                load(
+                    xlsm=str(fp),
+                    config=config,
+                    replace_process_by_name=replace_process_by_name,
+                    materials=materials,
+                    auto_create_materials=auto_create_materials,
+                    dry_run=dry_run,
+                    database_url=database_url,
+                    echo_sql=echo_sql,
+                )
+                ok += 1
+        except Exception as ex:
+            fail += 1
+            typer.echo(f"💥 {action} crashed on {fp.name}: {ex!r}")
+
+    typer.echo("\n=== SUMMARY ===")
+    typer.echo(f"  Action: {action}")
+    typer.echo(f"  OK:     {ok}")
+    typer.echo(f"  Failed: {fail}")
+    typer.echo(f"  Total:  {total}")
+    # Non-zero exit if anything failed, so CI can catch it
+    if fail:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
