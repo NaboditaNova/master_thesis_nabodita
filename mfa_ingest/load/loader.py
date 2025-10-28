@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 from datetime import datetime, date
 
 from sqlalchemy.orm import Session
@@ -11,6 +11,8 @@ from ..db_models.process_kpis import (
     SortingProcessKPI,
     RecyclingProcessKPI,
     CollectionFlowKPI,
+    SortingFlowKPI,
+    RecyclingFlowKPI,
 )
 from ..db_models.process import Process
 from ..db_models.flows import (
@@ -25,6 +27,8 @@ from ..schemas.flow import (
     ProcessPacket,
     FlowSampleIn,
     CollectionFlowKPIIn,
+    SortingFlowKPIIn,
+    RecyclingFlowKPIIn,
 )
 from ..schemas.material import MaterialIn
 
@@ -180,6 +184,8 @@ class LoadResult:
             "sorting_process_kpi": 0,
             "recycling_process_kpi": 0,
             "collection_flow_kpi": 0,
+            "sorting_flow_kpi": 0,
+            "recycling_flow_kpi": 0,
             "flow_sample": 0,
             "flow_sample_component": 0,
             "material_inserted": 0,
@@ -253,8 +259,8 @@ def load_packets(
         ):
             obj = CollectionProcessKPI(
                 collection_rate_amount=k.collection_rate_amount,
-                amount_unit=_nonblank(getattr(k, "amount_unit", None)),
-                reference_text=_nonblank(getattr(k, "reference_text", None)),
+                amount_unit=_nonblank(getattr(k, "collection_rate_unit", None)),
+                reference_text=_nonblank(getattr(k, "collection_reference_text", None)),
             )
             session.add(obj)
             session.flush()
@@ -269,8 +275,8 @@ def load_packets(
         ):
             obj = SortingProcessKPI(
                 sorting_yield_amount=k.sorting_yield_amount,
-                amount_unit=_nonblank(getattr(k, "amount_unit", None)),
-                reference_text=_nonblank(getattr(k, "reference_text", None)),
+                amount_unit=_nonblank(getattr(k, "sorting_yield_unit", None)),
+                reference_text=_nonblank(getattr(k, "sorting_reference_text", None)),
             )
             session.add(obj)
             session.flush()
@@ -285,8 +291,8 @@ def load_packets(
         ):
             obj = RecyclingProcessKPI(
                 recycling_yield_amount=k.recycling_yield_amount,
-                amount_unit=_nonblank(getattr(k, "amount_unit", None)),
-                reference_text=_nonblank(getattr(k, "reference_text", None)),
+                amount_unit=_nonblank(getattr(k, "recycling_yield_unit", None)),
+                reference_text=_nonblank(getattr(k, "recycling_reference_text", None)),
             )
             session.add(obj)
             session.flush()
@@ -325,7 +331,12 @@ def load_packets(
             res.counts["process_material_flow"] += 1
 
             # 2a) Flow KPI (collection only, for now)
-            flow_kpi_id: Optional[int] = None
+            # --- Flow-level KPI creation ---
+            col_flow_kpi_id: Optional[int] = None
+            sort_flow_kpi_id: Optional[int] = None
+            rec_flow_kpi_id: Optional[int] = None
+
+            # 3a) Collection flow KPI (existing logic, just assign to col_flow_kpi_id)
             if fp.collection_kpi is not None and _has_any(
                 fp.collection_kpi.model_dump(exclude_none=True)
             ):
@@ -349,7 +360,75 @@ def load_packets(
                 session.add(ck_obj)
                 session.flush()
                 res.counts["collection_flow_kpi"] += 1
-                flow_kpi_id = ck_obj.flow_kpi_id
+                col_flow_kpi_id = ck_obj.flow_kpi_id
+
+            # 3b) Sorting flow KPI (NEW)
+            sk = fp.sorting_kpi
+            if sk is not None and _has_any(sk.model_dump(exclude_none=True)):
+                sk = cast(SortingFlowKPIIn, sk)
+                sk_obj = SortingFlowKPI(
+                    maximum_total_amount_of_impurities_amount=sk.maximum_total_amount_of_impurities_amount,
+                    maximum_total_amount_of_impurities_unit=_nonblank(
+                        sk.maximum_total_amount_of_impurities_unit
+                    ),
+                    purity_amount=sk.purity_amount,
+                    purity_unit=_nonblank(sk.purity_unit),
+                    other_metal_items_amount=sk.other_metal_items_amount,
+                    other_metal_items_unit=_nonblank(sk.other_metal_items_unit),
+                    other_plastics_items_amount=sk.other_plastics_items_amount,
+                    other_plastics_items_unit=_nonblank(sk.other_plastics_items_unit),
+                    ppk_amount=sk.ppk_amount,
+                    ppk_unit=_nonblank(sk.ppk_unit),
+                    eps_items_amount=sk.eps_items_amount,
+                    eps_items_unit=_nonblank(sk.eps_items_unit),
+                    pvc_items_amount=sk.pvc_items_amount,
+                    pvc_items_unit=_nonblank(sk.pvc_items_unit),
+                    colourless_transparent_foils_amount=sk.colourless_transparent_foils_amount,
+                    colourless_transparent_foils_unit=_nonblank(
+                        sk.colourless_transparent_foils_unit
+                    ),
+                    yield_of_ds_from_input_amount=sk.yield_of_ds_from_input_amount,
+                    yield_of_ds_from_input_unit=_nonblank(
+                        sk.yield_of_ds_from_input_unit
+                    ),
+                )
+                session.add(sk_obj)
+                session.flush()
+                res.counts["sorting_flow_kpi"] += 1
+                sort_flow_kpi_id = sk_obj.flow_kpi_id
+
+            # 3c) Recycling flow KPI (NEW)
+            rk = fp.recycling_kpi
+            if rk is not None and _has_any(rk.model_dump(exclude_none=True)):
+                rk = cast(RecyclingFlowKPIIn, rk)
+                rk_obj = RecyclingFlowKPI(
+                    filtration_amount=rk.filtration_amount,
+                    filtration_unit=_nonblank(rk.filtration_unit),
+                    recyclate_polymer_purity_amount=rk.recyclate_polymer_purity_amount,
+                    recyclate_polymer_purity_unit=_nonblank(
+                        rk.recyclate_polymer_purity_unit
+                    ),
+                    pcr_content_amount=rk.pcr_content_amount,
+                    pcr_content_unit=_nonblank(rk.pcr_content_unit),
+                    melt_flow_rate_amount=rk.melt_flow_rate_amount,
+                    melt_flow_rate_unit=_nonblank(rk.melt_flow_rate_unit),
+                    ash_content_amount=rk.ash_content_amount,
+                    ash_content_unit=_nonblank(rk.ash_content_unit),
+                    tensile_modulus_amount=rk.tensile_modulus_amount,
+                    tensile_modulus_unit=_nonblank(rk.tensile_modulus_unit),
+                    tensile_strength_amount=rk.tensile_strength_amount,
+                    tensile_strength_unit=_nonblank(rk.tensile_strength_unit),
+                    chapry_notch_impact_strength_amount=rk.chapry_notch_impact_strength_amount,
+                    chapry_notch_impact_strength_unit=_nonblank(
+                        rk.chapry_notch_impact_strength_unit
+                    ),
+                    yield_flow_sample_amount=rk.yield_flow_sample_amount,
+                    yield_flow_sample_unit=_nonblank(rk.yield_flow_sample_unit),
+                )
+                session.add(rk_obj)
+                session.flush()
+                res.counts["recycling_flow_kpi"] += 1
+                rec_flow_kpi_id = rk_obj.flow_kpi_id
 
             # 2b) Flow sample
             if fp.sample is not None and _has_any(
@@ -358,7 +437,10 @@ def load_packets(
                 s: FlowSampleIn = fp.sample
                 sample = FlowSample(
                     material_flow_id=flow.material_flow_id,
-                    collection_flow_kpi_id=flow_kpi_id,
+                    # link all flow-KPIs (any may be None)
+                    collection_flow_kpi_id=col_flow_kpi_id,
+                    sorting_flow_kpi_id=sort_flow_kpi_id,
+                    recycling_flow_kpi_id=rec_flow_kpi_id,
                     stakeholder_name=_nonblank(s.stakeholder_name),
                     sample_date=_parse_date_maybe(s.sample_date),
                     contamination=s.contamination,

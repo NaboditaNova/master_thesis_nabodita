@@ -72,33 +72,41 @@ class FlowSample(Base):
         nullable=True,
     )
     sorting_flow_kpi_id: Mapped[int | None] = mapped_column(
-        mysql.BIGINT(unsigned=True), nullable=True
+        mysql.BIGINT(unsigned=True),
+        ForeignKey(
+            "sorting_flow_kpi.flow_kpi_id", onupdate="CASCADE", ondelete="RESTRICT"
+        ),
+        nullable=True,
     )
     recycling_flow_kpi_id: Mapped[int | None] = mapped_column(
-        mysql.BIGINT(unsigned=True), nullable=True
+        mysql.BIGINT(unsigned=True),
+        ForeignKey(
+            "recycling_flow_kpi.flow_kpi_id", onupdate="CASCADE", ondelete="RESTRICT"
+        ),
+        nullable=True,
     )
 
     stakeholder_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     sample_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
-    contamination: Mapped[float | None] = mapped_column(DECIMAL(6, 3), nullable=True)
+    contamination: Mapped[float | None] = mapped_column(DECIMAL(9, 3), nullable=True)
     contamination_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     moisture_condition: Mapped[str | None] = mapped_column(String(100), nullable=True)
     density: Mapped[float | None] = mapped_column(DECIMAL(12, 3), nullable=True)
     density_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     carbon_content_pct: Mapped[float | None] = mapped_column(
-        DECIMAL(6, 3), nullable=True
+        DECIMAL(9, 3), nullable=True
     )
     nitrogen_content_pct: Mapped[float | None] = mapped_column(
-        DECIMAL(6, 3), nullable=True
+        DECIMAL(9, 3), nullable=True
     )
     hydrogen_content_pct: Mapped[float | None] = mapped_column(
-        DECIMAL(6, 3), nullable=True
+        DECIMAL(9, 3), nullable=True
     )
     phosphorus_content_pct: Mapped[float | None] = mapped_column(
-        DECIMAL(6, 3), nullable=True
+        DECIMAL(9, 3), nullable=True
     )
     oxygen_content_pct: Mapped[float | None] = mapped_column(
-        DECIMAL(6, 3), nullable=True
+        DECIMAL(9, 3), nullable=True
     )
     color: Mapped[str | None] = mapped_column(String(100), nullable=True)
     amount_value: Mapped[float | None] = mapped_column(DECIMAL(12, 3), nullable=True)
@@ -156,6 +164,8 @@ class FlowSample(Base):
     collection_flow_kpi = relationship(
         "CollectionFlowKPI", back_populates="flow_samples"
     )
+    sorting_flow_kpi = relationship("SortingFlowKPI", back_populates="flow_samples")
+    recycling_flow_kpi = relationship("RecyclingFlowKPI", back_populates="flow_samples")
     components = relationship(
         "FlowSampleComponent", back_populates="sample", cascade="all, delete-orphan"
     )
@@ -193,18 +203,18 @@ class FlowSampleComponent(Base):
     amount_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     __table_args__ = (
+        # Pairing: if amount_value non-blank -> amount_unit must be non-blank
         CheckConstraint(
-            "amount_value IS NULL OR (amount_unit IS NOT NULL AND TRIM(amount_unit) <> '')",
+            "NULLIF(TRIM(amount_value), '') IS NULL "
+            "OR NULLIF(TRIM(amount_unit),  '') IS NOT NULL",
             name="chk_fsc_amount_pair",
         ),
+        # At least one of the descriptive fields present (avoid ghost rows)
         CheckConstraint(
-            "amount_value IS NULL OR amount_value >= 0", name="chk_fsc_amount_nonneg"
-        ),
-        CheckConstraint(
-            "(polymer_name IS NOT NULL AND TRIM(polymer_name) <> '') "
-            "OR (description IS NOT NULL AND TRIM(description) <> '') "
-            "OR amount_value IS NOT NULL "
-            "OR (amount_unit IS NOT NULL AND TRIM(amount_unit) <> '')",
+            "NULLIF(TRIM(polymer_name), '') IS NOT NULL "
+            "OR NULLIF(TRIM(description), '') IS NOT NULL "
+            "OR NULLIF(TRIM(amount_value), '') IS NOT NULL "
+            "OR NULLIF(TRIM(amount_unit), '') IS NOT NULL",
             name="chk_fsc_at_least_one_data",
         ),
         {"mysql_engine": "InnoDB"},

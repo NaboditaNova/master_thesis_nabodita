@@ -144,6 +144,30 @@ mfa_sheet:
     residual waste share: {field_value: "residual_waste_share_amount_value", field_unit: "residual_waste_share_amount_unit"}
     expanded polystyrene (eps) items: {field_value: "eps_items_amount_value", field_unit: "eps_items_amount_unit"}
 
+  # NEW: Sorting PSD → sorting_flow_kpi
+  map_sorting_kpi_rows:
+    maximum_total_amount_of_impurities: {field_value: "maximum_total_amount_of_impurities_amount", field_unit: "maximum_total_amount_of_impurities_unit"}
+    sorting purity spec wt pct: {field_value: "purity_amount", field_unit: "purity_unit"}
+    other metal items: {field_value: "other_metal_items_amount", field_unit: "other_metal_items_unit"}
+    other plastics items: {field_value: "other_plastics_items_amount", field_unit: "other_plastics_items_unit"}
+    paper,paperboard, cardboard(ppk): {field_value: "ppk_amount", field_unit: "ppk_unit"}
+    expanded polystyrene (eps) items: {field_value: "eps_items_amount", field_unit: "eps_items_unit"}
+    pvc items: {field_value: "pvc_items_amount", field_unit: "pvc_items_unit"}
+    colourless,transparent foils: {field_value: "colourless_transparent_foils_amount", field_unit: "colourless_transparent_foils_unit"}
+    yield_of_ds_from_input: {field_value: "yield_of_ds_from_input_amount", field_unit: "yield_of_ds_from_input_unit"}
+
+  # NEW: Recycling PSD → recycling_flow_kpi
+  map_recycling_kpi_rows:
+    filtration: {field_value: "filtration_amount", field_unit: "filtration_unit"}
+    recyclate polymer purity dry wt pct: {field_value: "recyclate_polymer_purity_amount", field_unit: "recyclate_polymer_purity_unit"}
+    post-consumer recycled (pcr) content: {field_value: "pcr_content_amount", field_unit: "pcr_content_unit"}
+    melt flow rate: {field_value: "melt_flow_rate_amount", field_unit: "melt_flow_rate_unit"}
+    ash content: {field_value: "ash_content_amount", field_unit: "ash_content_unit"}
+    tensile modulus: {field_value: "tensile_modulus_amount", field_unit: "tensile_modulus_unit"}
+    tensile strength: {field_value: "tensile_strength_amount", field_unit: "tensile_strength_unit"}
+    chapry notch impact strength: {field_value: "chapry_notch_impact_strength_amount", field_unit: "chapry_notch_impact_strength_unit"}
+    yield_flow_sample: {field_value: "yield_flow_sample_amount", field_unit: "yield_flow_sample_unit"}
+
 
 material_sheet:
   sheet_name: "Material_Table"

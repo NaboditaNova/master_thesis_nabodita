@@ -120,7 +120,14 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
 
     # Flexible ETL buckets: values can be str/float/None; annotate as Any to keep mypy happy
     per_mat: Dict[str, Dict[str, Any]] = {
-        name: {"sample": {}, "collection_kpi": None, "components": [], "flags": {}}
+        name: {
+            "sample": {},
+            "collection_kpi": None,
+            "sorting_kpi": None,
+            "recycling_kpi": None,
+            "components": [],
+            "flags": {},
+        }
         for name, _ in materials
     }
 
@@ -263,11 +270,54 @@ def parse_mfa_sheet(path: str, cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
                         if fu and unit_str:
                             kpi_dict[fu] = unit_str
 
+            # --- Process Specific Data (Sorting) → flow KPI (numeric + unit)
+            elif section_key == "psd_sorting":
+                smap = scfg["map_sorting_kpi_rows"]
+                if key in smap:
+                    for idx, (mat_name, _) in enumerate(materials):
+                        if idx >= len(pairs):
+                            break
+                        a_col, u_col = pairs[idx]
+                        aval = _to_float(df.iat[r, a_col]) if a_col != -1 else None
+                        uval = _n(df.iat[r, u_col]) if (u_col != -1) else ""
+                        if aval is None and not _n(uval):
+                            continue
+                        if per_mat[mat_name].get("sorting_kpi") is None:
+                            per_mat[mat_name]["sorting_kpi"] = {}
+                        fv = smap[key]["field_value"]
+                        fu = smap[key]["field_unit"]
+                        if aval is not None:
+                            per_mat[mat_name]["sorting_kpi"][fv] = aval
+                        if fu and _n(uval):
+                            per_mat[mat_name]["sorting_kpi"][fu] = uval
+
+            # --- Process Specific Data (Recycling) → flow KPI (numeric + unit)
+            elif section_key == "psd_recycling":
+                rmap = scfg["map_recycling_kpi_rows"]
+                if key in rmap:
+                    for idx, (mat_name, _) in enumerate(materials):
+                        if idx >= len(pairs):
+                            break
+                        a_col, u_col = pairs[idx]
+                        aval = _to_float(df.iat[r, a_col]) if a_col != -1 else None
+                        uval = _n(df.iat[r, u_col]) if (u_col != -1) else ""
+                        if aval is None and not _n(uval):
+                            continue
+                        if per_mat[mat_name].get("recycling_kpi") is None:
+                            per_mat[mat_name]["recycling_kpi"] = {}
+                        fv = rmap[key]["field_value"]
+                        fu = rmap[key]["field_unit"]
+                        if aval is not None:
+                            per_mat[mat_name]["recycling_kpi"][fv] = aval
+                        if fu and _n(uval):
+                            per_mat[mat_name]["recycling_kpi"][fu] = uval
+
     # Fill: Generic Data, Elementary, PSD (Collection)
     _fill_generic_like("generic_data")
     _fill_generic_like("elementary")
     _fill_generic_like("psd_collection")
-    # Sorting/Recycling: placeholders (ignored for now)
+    _fill_generic_like("psd_sorting")  # NEW
+    _fill_generic_like("psd_recycling")  # NEW
 
     # --- Material Composition (polymer_name/description + per-material amount/unit) ---
     mc_row = _find_section_row(df, scfg["sections"]["material_composition"])

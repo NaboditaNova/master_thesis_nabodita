@@ -5,7 +5,7 @@ from .extract.process_sheet_parser import parse_process_sheet
 from .transform.process_sheet_builder import build_packets_from_process_dict
 from .extract.mfa_sheet_parser import parse_mfa_sheet
 from .transform.merge_mfa_with_process import merge_mfa_into_packets
-from typing import Optional
+from typing import Optional, Dict
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -50,6 +50,101 @@ def validate(
     unmatched = merge_mfa_into_packets(packets, mfa)
 
     issues = validate_packets(packets)
+
+    # --- PSD exclusivity rules (HARD ERRORS) ---
+    def _has_any_local(d: dict | None) -> bool:
+        """True if any non-empty value is present in a dict."""
+        if not d:
+            return False
+        for v in d.values():
+            if v is None:
+                continue
+            if isinstance(v, str) and not v.strip():
+                continue
+            return True
+        return False
+
+    # Map flow name -> process type
+    flow_to_ptype: Dict[str, str] = {}
+    for p in packets:
+        for fp in p.flows:
+            nm = (fp.flow.material_name or "").strip().lower()
+            if nm:
+                flow_to_ptype[nm] = p.process.process_type
+
+    for mat_name, payload in mfa.items():
+        key = (mat_name or "").strip().lower()
+        ptype = flow_to_ptype.get(key)
+        if not ptype:
+            # unmatched material names are handled elsewhere
+            continue
+
+        ck = payload.get("collection_kpi") or {}
+        sk = payload.get("sorting_kpi") or {}
+        rk = payload.get("recycling_kpi") or {}
+
+        if ptype == "Sorting":
+            # Only "Process Specific Data (Sorting)" may have data.
+            if _has_any_local(ck):
+                issues.append(
+                    Issue(
+                        "MFA (PSD exclusivity)",
+                        0,
+                        f"{mat_name!r}: 'Process Specific Data (Collection)' must be empty for a Sorting process "
+                        f"(i.e., no values in its Amount/Unit cells).",
+                    )
+                )
+            if _has_any_local(rk):
+                issues.append(
+                    Issue(
+                        "MFA (PSD exclusivity)",
+                        0,
+                        f"{mat_name!r}: 'Process Specific Data (Recycling)' must be empty for a Sorting process "
+                        f"(i.e., no values in its Amount and Unit/Method/Condition cells).",
+                    )
+                )
+
+        elif ptype == "Collection":
+            # Only "Process Specific Data (Collection)" may have data.
+            if _has_any_local(sk):
+                issues.append(
+                    Issue(
+                        "MFA (PSD exclusivity)",
+                        0,
+                        f"{mat_name!r}: 'Process Specific Data (Sorting)' must be empty for a Collection process "
+                        f"(i.e., no values in its Amount/Unit cells).",
+                    )
+                )
+            if _has_any_local(rk):
+                issues.append(
+                    Issue(
+                        "MFA (PSD exclusivity)",
+                        0,
+                        f"{mat_name!r}: 'Process Specific Data (Recycling)' must be empty for a Collection process "
+                        f"(i.e., no values in its Amount and Unit/Method/Condition cells).",
+                    )
+                )
+
+        elif ptype == "Recycling":
+            # Only "Process Specific Data (Recycling)" may have data.
+            if _has_any_local(ck):
+                issues.append(
+                    Issue(
+                        "MFA (PSD exclusivity)",
+                        0,
+                        f"{mat_name!r}: 'Process Specific Data (Collection)' must be empty for a Recycling process "
+                        f"(i.e., no values in its Amount/Unit cells).",
+                    )
+                )
+            if _has_any_local(sk):
+                issues.append(
+                    Issue(
+                        "MFA (PSD exclusivity)",
+                        0,
+                        f"{mat_name!r}: 'Process Specific Data (Sorting)' must be empty for a Recycling process "
+                        f"(i.e., no values in its Amount/Unit cells).",
+                    )
+                )
 
     # A) Orphan MFA columns with data
     for name in unmatched:
@@ -168,15 +263,58 @@ def plan(
         }
     )
 
+    # Counters for pseudo-IDs
+    s_counter = 0  # flow_sample
+    c_counter = 0  # flow_sample_component
+
+    k_counter = 0  # collection_flow_kpi
+    ks_counter = 0  # sorting_flow_kpi
+    kr_counter = 0  # recycling_flow_kpi
+
+    c_pk_counter = 0  # collection_process_kpi
+    s_pk_counter = 0  # sorting_process_kpi
+    r_pk_counter = 0  # recycling_process_kpi
+
     print("\n=== INSERT PLAN ===")
 
     print("\nTable: process")
     print(f"  id: P1 -> {process_row}")
 
-    # Counters for pseudo-IDs
-    k_counter = 0  # collection_flow_kpi
-    s_counter = 0  # flow_sample
-    c_counter = 0  # flow_sample_component
+    # Show process-level KPI if present on ProcessIn (builder attaches these)
+    proc = packets[0].process
+    if getattr(proc, "collection_rate_amount", None) is not None:
+        prow = compact(
+            {
+                "collection_rate_amount": proc.collection_rate_amount,
+                "amount_unit": getattr(proc, "collection_rate_unit", None),
+                "reference_text": getattr(proc, "collection_reference_text", None),
+            }
+        )
+        print("    ↳ Table: collection_process_kpi")
+        print(f"       id: PK1 -> {prow}")
+        c_pk_counter += 1
+    elif getattr(proc, "sorting_yield_amount", None) is not None:
+        prow = compact(
+            {
+                "sorting_yield_amount": proc.sorting_yield_amount,
+                "amount_unit": getattr(proc, "sorting_yield_unit", None),
+                "reference_text": getattr(proc, "sorting_reference_text", None),
+            }
+        )
+        print("    ↳ Table: sorting_process_kpi")
+        print(f"       id: PK1 -> {prow}")
+        s_pk_counter += 1
+    elif getattr(proc, "recycling_yield_amount", None) is not None:
+        prow = compact(
+            {
+                "recycling_yield_amount": proc.recycling_yield_amount,
+                "amount_unit": getattr(proc, "recycling_yield_unit", None),
+                "reference_text": getattr(proc, "recycling_reference_text", None),
+            }
+        )
+        print("    ↳ Table: recycling_process_kpi")
+        print(f"       id: PK1 -> {prow}")
+        r_pk_counter += 1
 
     print("\nTable: process_material_flow")
     flow_ids = []
@@ -195,7 +333,7 @@ def plan(
         )
         print(f"  id: {F_ID} -> {flow_row}")
 
-        K_ID = None
+        K_ID = Ks_ID = Kr_ID = None
         if fp.collection_kpi:
             k_counter += 1
             K_ID = f"K{k_counter}"
@@ -203,12 +341,31 @@ def plan(
             print("    ↳ Table: collection_flow_kpi")
             print(f"       id: {K_ID} -> {krow}")
 
+        if fp.sorting_kpi:
+            ks_counter += 1
+            Ks_ID = f"K{ks_counter}"
+            krow = compact(fp.sorting_kpi.model_dump(exclude_none=True))
+            print("    ↳ Table: sorting_flow_kpi")
+            print(f"       id: {Ks_ID} -> {krow}")
+
+        if fp.recycling_kpi:
+            kr_counter += 1
+            Kr_ID = f"K{kr_counter}"
+            krow = compact(fp.recycling_kpi.model_dump(exclude_none=True))
+            print("    ↳ Table: recycling_flow_kpi")
+            print(f"       id: {Kr_ID} -> {krow}")
+
         if fp.sample:
             s_counter += 1
             S_ID = f"S{s_counter}"
             # drop internal 'rownum' from preview
             srow = compact(fp.sample.model_dump(exclude_none=True))
-            srow = {"material_flow_id": F_ID, "collection_flow_kpi_id": K_ID} | srow
+            srow = {
+                "material_flow_id": F_ID,
+                "collection_flow_kpi_id": K_ID,
+                "sorting_flow_kpi_id": Ks_ID,
+                "recycling_flow_kpi_id": Kr_ID,
+            } | srow
             print("    ↳ Table: flow_sample")
             print(f"       id: {S_ID} -> {srow}")
 
@@ -227,8 +384,13 @@ def plan(
     # Counts summary
     result = {
         "process": 1,
+        "collection_process_kpi": c_pk_counter,
+        "sorting_process_kpi": s_pk_counter,
+        "recycling_process_kpi": r_pk_counter,
         "process_material_flow": len(flow_ids),
         "collection_flow_kpi": k_counter,
+        "sorting_flow_kpi": ks_counter,
+        "recycling_flow_kpi": kr_counter,
         "flow_sample": s_counter,
         "flow_sample_component": c_counter,
     }
@@ -246,10 +408,10 @@ def plan(
         from .transform.material_matcher import match_components_to_materials
 
         mats = parse_material_sheet(xlsm, cfg)
-        print("\nTable: material (preview; inserts/updates happen in Step 4)")
+        print("\nTable: material")
         for i, m in enumerate(mats[:20], start=1):
             print(
-                f"  id?: M{i} -> ",
+                f"  id: M{i} -> ",
                 {k: v for k, v in m.model_dump(exclude_none=True).items()},
             )
 
@@ -323,36 +485,41 @@ def load(
     # DB session
     engine = get_engine(database_url_override=database_url, echo=echo_sql)
     with get_session(engine) as session:
-        session.begin()
-        mat_cfg = cfg.get("material_sheet", {})
-        # normalize to lowercase for robust matches
-        hmap_src = mat_cfg.get("hardcode_map") or {}
-        hardcode_map = {
-            (k or "").strip().lower(): (v or "").strip().lower()
-            for k, v in hmap_src.items()
-        }
+        try:
+            with session.begin():
+                mat_cfg = cfg.get("material_sheet", {})
+                # normalize to lowercase for robust matches
+                hmap_src = mat_cfg.get("hardcode_map") or {}
+                hardcode_map = {
+                    (k or "").strip().lower(): (v or "").strip().lower()
+                    for k, v in hmap_src.items()
+                }
 
-        syn_src = mat_cfg.get("synonyms") or {}
-        synonyms = {
-            (canon or "")
-            .strip()
-            .lower(): [(a or "").strip().lower() for a in (aliases or [])]
-            for canon, aliases in syn_src.items()
-        }
-        opts = LoadOptions(
-            replace_process_by_name=replace_process_by_name,
-            materials=mats,
-            auto_create_materials=auto_create_materials,
-            hardcode_map=hardcode_map,  # <-- pass in
-            synonyms=synonyms,  # <-- pass in
-        )
-        result = load_packets(session, packets, opts)
+                syn_src = mat_cfg.get("synonyms") or {}
+                synonyms = {
+                    (canon or "")
+                    .strip()
+                    .lower(): [(a or "").strip().lower() for a in (aliases or [])]
+                    for canon, aliases in syn_src.items()
+                }
+                opts = LoadOptions(
+                    replace_process_by_name=replace_process_by_name,
+                    materials=mats,
+                    auto_create_materials=auto_create_materials,
+                    hardcode_map=hardcode_map,  # <-- pass in
+                    synonyms=synonyms,  # <-- pass in
+                )
+                result = load_packets(session, packets, opts)
 
-        if dry_run:
-            # Don't persist anything; this mimics everything except the final commit
+                if dry_run:
+                    # Don't persist anything; this mimics everything except the final commit
+                    session.rollback()
+                else:
+                    session.commit()
+
+        except:
             session.rollback()
-        else:
-            session.commit()
+            raise
 
     # Pretty summary
     print("\n=== LOAD SUMMARY ===")
@@ -368,6 +535,8 @@ def load(
         "process",
         "process_material_flow",
         "collection_flow_kpi",
+        "sorting_flow_kpi",
+        "recycling_flow_kpi",
         "flow_sample",
         "flow_sample_component",
     ):
@@ -379,6 +548,26 @@ def load(
             print(f"  - flow {flow_name!r}: component {cmp_name!r}")
         if len(result.components_without_material) > 50:
             print(f"  ... and {len(result.components_without_material) - 50} more")
+
+    total = sum(
+        result.counts[k]
+        for k in (
+            "collection_process_kpi",
+            "sorting_process_kpi",
+            "recycling_process_kpi",
+            "process",
+            "process_material_flow",
+            "collection_flow_kpi",
+            "sorting_flow_kpi",
+            "recycling_flow_kpi",
+            "flow_sample",
+            "flow_sample_component",
+            "material_inserted",
+            "material_updated",
+        )
+    )
+
+    print(f"\nTotal operations (logical): {total}")
 
 
 if __name__ == "__main__":
