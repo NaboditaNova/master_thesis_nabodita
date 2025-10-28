@@ -1,7 +1,7 @@
 # mypy: ignore-errors
 from __future__ import annotations
 import os
-from mfa_ingest.db_models.base import Base  # <- your Declarative metadata
+from mfa_ingest.db_models.base import Base
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context  # type: ignore[attr-defined]
@@ -32,7 +32,12 @@ def _get_url():
 def run_migrations_offline():
     url = _get_url()
     context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=True,  # keep: detect DECIMAL precision/scale changes
+        compare_server_default=True,  # NEW: detect default changes
+        version_table="alembic_version",  # NEW: explicit version table name
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -44,10 +49,15 @@ def run_migrations_online():
         url=_get_url(),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # future=True  # optional; depends on your SQLAlchemy version
     )
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata, compare_type=True
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,  # keep
+            compare_server_default=True,  # NEW
+            version_table="alembic_version",  # NEW
         )
         with context.begin_transaction():
             context.run_migrations()

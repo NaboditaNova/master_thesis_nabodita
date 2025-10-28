@@ -21,6 +21,11 @@ def build_packets_from_process_dict(d: Dict) -> List[ProcessPacket]:
             if pinfo.get("kpi") and pinfo["kpi"]["table"] == "collection_process_kpi"
             else None
         ),
+        collection_reference_text=(
+            pinfo["kpi"].get("reference_text")
+            if pinfo.get("kpi") and pinfo["kpi"]["table"] == "collection_process_kpi"
+            else None
+        ),
         sorting_yield_amount=(
             pinfo["kpi"].get("sorting_yield_amount")
             if pinfo.get("kpi") and pinfo["kpi"]["table"] == "sorting_process_kpi"
@@ -31,6 +36,11 @@ def build_packets_from_process_dict(d: Dict) -> List[ProcessPacket]:
             if pinfo.get("kpi") and pinfo["kpi"]["table"] == "sorting_process_kpi"
             else None
         ),
+        sorting_reference_text=(
+            pinfo["kpi"].get("reference_text")
+            if pinfo.get("kpi") and pinfo["kpi"]["table"] == "sorting_process_kpi"
+            else None
+        ),
         recycling_yield_amount=(
             pinfo["kpi"].get("recycling_yield_amount")
             if pinfo.get("kpi") and pinfo["kpi"]["table"] == "recycling_process_kpi"
@@ -38,6 +48,11 @@ def build_packets_from_process_dict(d: Dict) -> List[ProcessPacket]:
         ),
         recycling_yield_unit=(
             pinfo["kpi"].get("amount_unit")
+            if pinfo.get("kpi") and pinfo["kpi"]["table"] == "recycling_process_kpi"
+            else None
+        ),
+        recycling_reference_text=(
+            pinfo["kpi"].get("reference_text")
             if pinfo.get("kpi") and pinfo["kpi"]["table"] == "recycling_process_kpi"
             else None
         ),
