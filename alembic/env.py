@@ -3,9 +3,11 @@ from __future__ import annotations
 import os
 from mfa_ingest.db_models.base import Base
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
 from alembic import context  # type: ignore[attr-defined]
 from dotenv import load_dotenv, find_dotenv
+
+# NEW: import the same engine builder that adds TLS connect_args
+from mfa_ingest.db.session import get_engine, DBSettings  # <-- NEW
 
 load_dotenv(find_dotenv())
 
@@ -18,11 +20,32 @@ target_metadata = Base.metadata
 
 
 def _get_url():
-    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    # url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    # if not url or url.startswith("%("):
+    #     raise RuntimeError(
+    #         "DATABASE_URL not set and sqlalchemy.url unresolved. Set env or alembic.ini."
+    #     )
+
+    """
+    Prefer DATABASE_URL; else compose from DB_* via DBSettings; else fallback to alembic.ini.
+    """
+    env_url = os.getenv("DATABASE_URL")
+    if env_url:
+        return env_url
+
+    # Use the same pydantic settings as the app (supports DB_USER/DB_PASSWORD/... from .env)
+    try:
+        return DBSettings().build_url()  # <-- NEW
+    except Exception:
+        pass
+
+    url = config.get_main_option("sqlalchemy.url")
     if not url or url.startswith("%("):
         raise RuntimeError(
-            "DATABASE_URL not set and sqlalchemy.url unresolved. Set env or alembic.ini."
+            "DATABASE_URL not set and sqlalchemy.url unresolved. "
+            "Set env vars (.env) or alembic.ini."
         )
+
     return url
 
 
@@ -40,14 +63,31 @@ def run_migrations_offline():
         context.run_migrations()
 
 
+# def run_migrations_online():
+#     connectable = engine_from_config(
+#         config.get_section(config.config_ini_section),
+#         url=_get_url(),
+#         prefix="sqlalchemy.",
+#         poolclass=pool.NullPool,
+#     )
+#     with connectable.connect() as connection:
+#         context.configure(
+#             connection=connection,
+#             target_metadata=target_metadata,
+#             compare_type=True,
+#             compare_server_default=True,
+#             version_table="alembic_version",
+#         )
+#         with context.begin_transaction():
+#             context.run_migrations()
+
+
 def run_migrations_online():
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        url=_get_url(),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-    with connectable.connect() as connection:
+    # Build the engine **through our get_engine** so TLS is applied consistently
+    url = _get_url()
+    engine = get_engine(database_url_override=url, echo=False)  # <-- NEW
+
+    with engine.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

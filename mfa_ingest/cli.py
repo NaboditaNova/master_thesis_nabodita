@@ -1,12 +1,15 @@
 import typer
 from .core.settings import settings
-from .core.db import make_engine, reflect_sanity_check
+
+# from .core.db import make_engine, reflect_sanity_check
 from .extract.process_sheet_parser import parse_process_sheet
 from .transform.process_sheet_builder import build_packets_from_process_dict
 from .extract.mfa_sheet_parser import parse_mfa_sheet
 from .transform.merge_mfa_with_process import merge_mfa_into_packets
 from typing import Optional, Dict, Union, Literal
 from pathlib import Path
+from .core.db import reflect_sanity_check
+from .db.session import get_engine
 
 EchoT = Union[bool, Literal["debug", "trace"]]
 app = typer.Typer(no_args_is_help=True)
@@ -20,14 +23,16 @@ def env():
 
 @app.command()
 def ping_db():
-    eng = make_engine()
+    # eng = make_engine()
+    eng = get_engine()
     with eng.connect():
         typer.echo("✅ DB connection OK")
 
 
 @app.command()
 def check_schema():
-    eng = make_engine()
+    # eng = make_engine()
+    eng = get_engine()
     reflect_sanity_check(eng)
     typer.echo("✅ Live schema looks OK (basic check)")
 
