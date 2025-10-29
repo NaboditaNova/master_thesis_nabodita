@@ -154,7 +154,6 @@ master_thesis_nabodita
     │   ├── process_kpis.py
     │   └── __init__.py
     ├── extract
-    │   ├── excel_reader.py
     │   ├── material_sheet_parser.py
     │   ├── mfa_sheet_parser.py
     │   ├── process_sheet_parser.py
