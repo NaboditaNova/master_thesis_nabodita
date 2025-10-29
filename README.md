@@ -123,25 +123,25 @@ master_thesis_nabodita
 ├── poetry.lock
 ├── pyproject.toml
 ├── README.md
+├── .github
+│   └── workflows
+│       └── ci.yml
 ├── alembic
 │   ├── alembic.ini
 │   ├── env.py
 │   ├── README
 │   ├── script.py.mako
 │   └── versions
-│       ├── 503e8e6710ef_material_drop_chemical_id_make_.py
-│       ├── cbbf78965a17_baseline_existing_schema_pre_alembic.py
-│       └── f41369d44069_baseline_create_process_triggers.py
+│       └── 001_nabodita_baseline_schema.py
 ├── config
 │   ├── default.yaml
 │   └── logging.ini
+├── data
 └── mfa_ingest
     ├── cli.py
     ├── __init__.py
-    ├── config
     ├── core
     │   ├── db.py
-    │   ├── logging.py
     │   ├── settings.py
     │   └── __init__.py
     ├── db
@@ -160,7 +160,6 @@ master_thesis_nabodita
     │   ├── process_sheet_parser.py
     │   └── __init__.py
     ├── load
-    │   ├── idempotency.py
     │   ├── loader.py
     │   └── __init__.py
     ├── schemas
