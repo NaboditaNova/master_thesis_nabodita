@@ -1,14 +1,12 @@
 from __future__ import annotations
 from contextlib import contextmanager
-from typing import Optional, Union, Literal, Any, Dict
+from typing import Optional, Union, Literal, Any
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine, URL
+from sqlalchemy.engine import Engine, URL, make_url
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
-import ssl as _ssl  # NEW
-import certifi  # NEW
 
 EchoT = Union[bool, Literal["debug", "trace"]]
 
@@ -90,40 +88,41 @@ class DBSettings(BaseSettings):
 
 
 # NEW: build driver-specific TLS connect_args
-def _make_connect_args(url: str, s: DBSettings) -> Dict[str, Any]:
-    if not s.DB_SSL:
+def _make_connect_args(url: Union[str, URL], s: DBSettings) -> dict[str, Any]:
+    """
+    Build driver-specific connect_args (e.g., SSL) for create_engine.
+    Works whether 'url' is a string or a SQLAlchemy URL object.
+    """
+    if not getattr(s, "DB_SSL", False):
         return {}
 
+    import certifi
+
     ca_path = s.DB_SSL_CA or certifi.where()
-    scheme = url.split("://", 1)[
-        0
-    ]  # e.g. 'mariadb+pymysql' or 'mariadb+mariadbconnector'
 
-    # PyMySQL
-    if scheme.endswith("+pymysql"):
-        # PyMySQL expects an 'ssl' dict
-        if s.DB_SSL_VERIFY:
-            return {"ssl": {"ca": ca_path}}
-        else:
-            # not recommended; keeps encryption without verification
-            return {"ssl": {"cert_reqs": _ssl.CERT_NONE}}
+    # Get the drivername like 'mariadb+pymysql' regardless of the input type
+    if isinstance(url, URL):
+        drivername = url.drivername
+    else:
+        drivername = make_url(url).drivername
 
-    # MariaDB Connector/Python
-    if scheme.endswith("+mariadbconnector") or scheme == "mariadb+mariadbconnector":
-        # ssl_mode:
-        #   - 'verify_ca' (verify cert using CA)
-        #   - 'required' (TLS w/o verification)
-        return {
-            "ssl_mode": "verify_ca" if s.DB_SSL_VERIFY else "required",
-            "ssl_ca": ca_path,
-        }
+    # PyMySQL expects an 'ssl' dict
+    if drivername.endswith("+pymysql"):
+        ssl_dict: dict[str, Any] = {"ca": ca_path}
+        # if you ever add a toggle to skip verification:
+        # if is_falsey(s.DB_SSL_VERIFY):
+        #     ssl_dict["check_hostname"] = False
+        #     ssl_dict["verify_mode"] = 0
+        return {"ssl": ssl_dict}
 
-    # Fallback: try PyMySQL style
-    return (
-        {"ssl": {"ca": ca_path}}
-        if s.DB_SSL_VERIFY
-        else {"ssl": {"cert_reqs": _ssl.CERT_NONE}}
-    )
+    # MariaDB Connector/Python (if you ever swap drivers)
+    if drivername.endswith("+mariadbconnector"):
+        # Different kw names for that DBAPI:
+        # 'ssl_ca' and optionally 'ssl_verify_cert' / 'ssl_verify_identity'
+        return {"ssl_ca": ca_path}
+
+    # Default: nothing special
+    return {}
 
 
 def get_engine(
