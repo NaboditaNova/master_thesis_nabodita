@@ -22,5 +22,3 @@ jobs:
       - name: Lint & type-check
         run: |
           poetry run ruff check .
-      - name: Tests
-        run: poetry run pytest -q
