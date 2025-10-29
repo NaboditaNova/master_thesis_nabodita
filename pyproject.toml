@@ -6,7 +6,7 @@ authors = [
     {name = "Nabodita Anam Nova",email = "naboditaanam.nova@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "sqlalchemy (>=2.0.44,<3.0.0)",
     "pymysql (>=1.1.2,<2.0.0)",
