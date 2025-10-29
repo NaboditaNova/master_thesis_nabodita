@@ -115,11 +115,23 @@ def _make_connect_args(url: Union[str, URL], s: DBSettings) -> dict[str, Any]:
         #     ssl_dict["verify_mode"] = 0
         return {"ssl": ssl_dict}
 
-    # MariaDB Connector/Python (if you ever swap drivers)
+    # MariaDB Connector/Python
     if drivername.endswith("+mariadbconnector"):
-        # Different kw names for that DBAPI:
-        # 'ssl_ca' and optionally 'ssl_verify_cert' / 'ssl_verify_identity'
-        return {"ssl_ca": ca_path}
+        cfg: dict[str, Any] = {}
+        if s.DB_SSL:
+            if s.DB_SSL_CA:
+                # Use an explicit CA bundle (keeps strict verification)
+                cfg["ssl_ca"] = s.DB_SSL_CA
+                cfg["ssl_verify_cert"] = bool(s.DB_SSL_VERIFY)
+                cfg["ssl_verify_identity"] = bool(s.DB_SSL_VERIFY)
+            else:
+                # No CA path provided: let the connector use the OS trust store (works on Windows)
+                cfg["ssl"] = True
+                # If you hit a hostname/cert quirk and need to relax temporarily:
+                if not s.DB_SSL_VERIFY:
+                    cfg["ssl_verify_cert"] = False
+                    cfg["ssl_verify_identity"] = False
+        return cfg
 
     # Default: nothing special
     return {}
