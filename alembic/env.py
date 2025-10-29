@@ -1,13 +1,16 @@
+# mypy: ignore-errors
+from __future__ import annotations
 import os
-import sys
+from mfa_ingest.db_models.base import Base  # <- your Declarative metadata
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context  # type: ignore[attr-defined]
 
-# allow importing the package
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
+# NEW: load .env so DATABASE_URL is available
+from dotenv import load_dotenv, find_dotenv
 
-from mfa_ingest.db_models.base import Base  # <- your Declarative metadata
+load_dotenv(find_dotenv())
+
 
 config = context.config
 if config.config_file_name is not None:
@@ -16,8 +19,18 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _get_url():
+    # prefer env var; fallback to alembic.ini sqlalchemy.url
+    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    if not url or url.startswith("%("):  # still unresolved interpolation
+        raise RuntimeError(
+            "DATABASE_URL not set and sqlalchemy.url unresolved. Set env or alembic.ini."
+        )
+    return url
+
+
 def run_migrations_offline():
-    url = os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    url = _get_url()
     context.configure(
         url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
     )
@@ -28,7 +41,7 @@ def run_migrations_offline():
 def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
-        url=os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url")),
+        url=_get_url(),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
