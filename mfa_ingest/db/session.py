@@ -2,7 +2,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Optional, Union, Literal, Any, Dict
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, URL
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -36,7 +36,8 @@ class DBSettings(BaseSettings):
     DB_SSL_VERIFY: bool = Field(default=True)  # verify server cert/hostname
     DB_SSL_CA: Optional[str] = None  # CA bundle path (optional; defaults to certifi)
 
-    def build_url(self) -> str:
+    def build_url(self):
+        # If a fully formed DATABASE_URL string is provided, use it as-is
         if self.DATABASE_URL:
             return self.DATABASE_URL
 
@@ -52,14 +53,40 @@ class DBSettings(BaseSettings):
                 "Either set DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME in .env"
             )
 
-        user = self.DB_USER or ""
-        pwd = self.DB_PASSWORD or ""
-        host = self.DB_HOST
-        port = self.DB_PORT
-        name = self.DB_NAME or ""
-        driver = self.DB_DRIVER
+        return URL.create(
+            self.DB_DRIVER,
+            username=self.DB_USER or "",
+            password=self.DB_PASSWORD or "",  # no manual quoting needed
+            host=self.DB_HOST,
+            port=self.DB_PORT,
+            database=self.DB_NAME or "",
+            # If you need a charset: query={"charset": "utf8mb4"},
+        )
 
-        return f"{driver}://{user}:{pwd}@{host}:{port}/{name}"
+    # def build_url(self) -> str:
+    #     if self.DATABASE_URL:
+    #         return self.DATABASE_URL
+
+    #     missing = [
+    #         k
+    #         for k in ("DB_USER", "DB_PASSWORD", "DB_NAME")
+    #         if getattr(self, k) in (None, "")
+    #     ]
+    #     if missing:
+    #         raise ValueError(
+    #             "DATABASE_URL not set and insufficient discrete DB_* vars. "
+    #             f"Missing: {', '.join(missing)}. "
+    #             "Either set DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME in .env"
+    #         )
+
+    #     user = self.DB_USER or ""
+    #     pwd = self.DB_PASSWORD or ""
+    #     host = self.DB_HOST
+    #     port = self.DB_PORT
+    #     name = self.DB_NAME or ""
+    #     driver = self.DB_DRIVER
+
+    #     return f"{driver}://{user}:{pwd}@{host}:{port}/{name}"
 
 
 # NEW: build driver-specific TLS connect_args
