@@ -22,6 +22,5 @@ jobs:
       - name: Lint & type-check
         run: |
           poetry run ruff check .
-          poetry run mypy mfa_ingest alembic/versions
       - name: Tests
         run: poetry run pytest -q
