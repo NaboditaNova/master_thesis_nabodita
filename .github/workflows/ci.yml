@@ -15,6 +15,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install MariaDB Connector/C
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmariadb-dev-compat libmariadb-dev
+          echo "MARIADB_CONFIG=$(command -v mariadb_config)" >> $GITHUB_ENV
       - name: Install Poetry
         run: pipx install poetry
       - name: Install deps
