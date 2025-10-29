@@ -1,0 +1,9 @@
+sheets:
+  material: "Material_Table"
+  process: "Process"
+  flows: "MFA&Material_quality_Template"
+  general: "General data"
+
+etl:
+  chunk_size: 500
+  dry_run: true
