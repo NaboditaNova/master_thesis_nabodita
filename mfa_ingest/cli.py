@@ -7,6 +7,7 @@ from .extract.mfa_sheet_parser import parse_mfa_sheet
 from .transform.merge_mfa_with_process import merge_mfa_into_packets
 from typing import Optional, Dict, Union, Literal
 from pathlib import Path
+from mfa_ingest.visualize.sankey import build_sankey
 
 EchoT = Union[bool, Literal["debug", "trace"]]
 app = typer.Typer(no_args_is_help=True)
@@ -683,6 +684,22 @@ def walk(
     # Non-zero exit if anything failed, so CI can catch it
     if fail:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def sankey(
+    out_html: Path = typer.Option(
+        Path("outputs/sankey.html"), help="Where to save the interactive HTML"
+    ),
+    out_png: Optional[Path] = typer.Option(None, help="Optional PNG path"),
+):
+    """
+    Build a Sankey diagram from the DB tables (process + process_material_flow).
+    Process nodes are colored by process_type. The root input to Collection with
+    'Potential' is renamed to 'Household Collection LVP'.
+    """
+    build_sankey(out_html=out_html, out_png=out_png)
+    typer.echo(f"✅ Sankey saved: {out_html}" + (f" and {out_png}" if out_png else ""))
 
 
 if __name__ == "__main__":
