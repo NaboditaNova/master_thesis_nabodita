@@ -7,7 +7,7 @@ from .extract.mfa_sheet_parser import parse_mfa_sheet
 from .transform.merge_mfa_with_process import merge_mfa_into_packets
 from typing import Optional, Dict, Union, Literal
 from pathlib import Path
-from mfa_ingest.visualize.sankey import build_sankey
+from mfa_ingest.visualize.sankey import SplitConfig, generate_sankey_groups
 
 EchoT = Union[bool, Literal["debug", "trace"]]
 app = typer.Typer(no_args_is_help=True)
@@ -688,18 +688,32 @@ def walk(
 
 @app.command()
 def sankey(
-    out_html: Path = typer.Option(
-        Path("outputs/sankey.html"), help="Where to save the interactive HTML"
+    outdir: str = typer.Option(
+        "outputs\\sankey", "--out", help="Output directory for HTMLs"
     ),
-    out_png: Optional[Path] = typer.Option(None, help="Optional PNG path"),
+    first_root_label: str = typer.Option(
+        "Household LVP", help="Root label for the FIRST diagram"
+    ),
+    subsequent_root_label: str = typer.Option(
+        "Household LVP", help="Root label for all SUBSEQUENT diagrams"
+    ),
 ):
     """
-    Build a Sankey diagram from the DB tables (process + process_material_flow).
-    Process nodes are colored by process_type. The root input to Collection with
-    'Potential' is renamed to 'Household Collection LVP'.
+    Generate one or more Sankey diagrams.
+
+    Logic:
+      - Rows are split into groups whenever a new 'Collection' Input appears.
+      - Group 1 uses --first-root-label (default: 'Household  LVP').
+      - Group 2+ use --subsequent-root-label (default: 'Household LVP').
     """
-    build_sankey(out_html=out_html, out_png=out_png)
-    typer.echo(f"✅ Sankey saved: {out_html}" + (f" and {out_png}" if out_png else ""))
+    eng = make_engine()
+    cfg = SplitConfig(
+        first_root_label=first_root_label or None,
+        subsequent_root_label=subsequent_root_label or None,
+        arrangement="freeform",  # keep tidy; plotly can't drag nodes interactively
+    )
+    n = generate_sankey_groups(eng, outdir, cfg)
+    typer.echo(f"✅ Generated {n} Sankey diagram(s) in: {outdir}")
 
 
 if __name__ == "__main__":
